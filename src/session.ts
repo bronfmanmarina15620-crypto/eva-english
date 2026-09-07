@@ -171,7 +171,9 @@ function makeOralBlend(word: CvcWord, pool: CvcWord[]): Question {
 
 function makeBuildCvc(word: CvcWord, letterPool: Letter[]): Question {
   const needed = word.letters.map((id) => LETTERS.find((l) => l.id === id)!)
-  const extras = shuffle(letterPool.filter((l) => !word.letters.includes(l.id))).slice(0, 3)
+  const pool = [...letterPool]
+  for (const L of needed) if (!pool.some((x) => x.id === L.id)) pool.push(L)
+  const extras = shuffle(pool.filter((l) => !word.letters.includes(l.id))).slice(0, 3)
   return {
     id: `build-${word.id}-${Math.random().toString(36).slice(2, 7)}`,
     type: 'build-cvc',
@@ -200,7 +202,9 @@ function makeReadCvc(word: CvcWord, pool: CvcWord[]): Question {
 
 function makeSegment(word: CvcWord, letterPool: Letter[]): Question {
   const needed = word.letters.map((id) => LETTERS.find((l) => l.id === id)!)
-  const extras = shuffle(letterPool.filter((l) => !word.letters.includes(l.id))).slice(0, 3)
+  const pool = [...letterPool]
+  for (const L of needed) if (!pool.some((x) => x.id === L.id)) pool.push(L)
+  const extras = shuffle(pool.filter((l) => !word.letters.includes(l.id))).slice(0, 3)
   return {
     id: `seg-${word.id}-${Math.random().toString(36).slice(2, 7)}`,
     type: 'segment',

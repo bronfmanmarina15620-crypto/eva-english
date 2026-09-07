@@ -98,7 +98,7 @@ export const CVC_WORDS: CvcWord[] = [
   { id: 'bug', word: 'bug', letters: ['b', 'u', 'g'], vowel: 'u', emoji: '🐛', cluster: 3 },
   { id: 'fun', word: 'fun', letters: ['f', 'u', 'n'], vowel: 'u', emoji: '🎉', cluster: 3 },
   { id: 'sun', word: 'sun', letters: ['s', 'u', 'n'], vowel: 'u', emoji: '☀️', cluster: 3 },
-  { id: 'fox', word: 'fox', letters: ['f', 'o', 'x'], vowel: 'o', emoji: '🦊', cluster: 3 },
+  { id: 'bud', word: 'bud', letters: ['b', 'u', 'd'], vowel: 'u', emoji: '🌸', cluster: 3 },
   { id: 'mug', word: 'mug', letters: ['m', 'u', 'g'], vowel: 'u', emoji: '🫖', cluster: 3 },
   { id: 'lot', word: 'lot', letters: ['l', 'o', 't'], vowel: 'o', emoji: '📦', cluster: 3 },
   { id: 'got', word: 'got', letters: ['g', 'o', 't'], vowel: 'o', emoji: '✅', cluster: 3 },
