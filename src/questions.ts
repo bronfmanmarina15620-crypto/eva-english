@@ -1,7 +1,16 @@
 /** Render + handle all question types */
 
 import type { Question } from './session'
-import { speak, speakLetterSound, speakLetterName, beep } from './audio'
+import {
+  speak,
+  speakLetterSound,
+  speakLetterName,
+  speakSequence,
+  beep,
+  unlock,
+  canAutoSpeak,
+  AUDIO_FAIL_HE,
+} from './audio'
 import { getLetter } from './content'
 
 export type AnswerResult = {
@@ -27,14 +36,59 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return n
 }
 
+function showAudioToast(near: HTMLElement, msg: string): void {
+  let toast = near.parentElement?.querySelector<HTMLElement>('.audio-toast')
+  if (!toast) {
+    toast = el('p', 'audio-toast', msg)
+    near.insertAdjacentElement('afterend', toast)
+  } else {
+    toast.textContent = msg
+  }
+  toast.classList.add('show')
+  window.setTimeout(() => toast?.classList.remove('show'), 4000)
+}
+
+function bindSpeakPulse(btn: HTMLButtonElement): void {
+  const onStart = () => btn.classList.add('playing')
+  const onEnd = () => btn.classList.remove('playing')
+  const onFail = (ev: Event) => {
+    btn.classList.remove('playing')
+    const detail = (ev as CustomEvent).detail as { message?: string } | undefined
+    showAudioToast(btn, detail?.message || AUDIO_FAIL_HE)
+  }
+  window.addEventListener('eva-audio-start', onStart)
+  window.addEventListener('eva-audio-end', onEnd)
+  window.addEventListener('eva-audio-fail', onFail)
+  // Clean up when card is replaced (next render clears DOM; listeners linger — use AbortController via dataset flag)
+  const obs = new MutationObserver(() => {
+    if (!document.body.contains(btn)) {
+      window.removeEventListener('eva-audio-start', onStart)
+      window.removeEventListener('eva-audio-end', onEnd)
+      window.removeEventListener('eva-audio-fail', onFail)
+      obs.disconnect()
+    }
+  })
+  obs.observe(document.body, { childList: true, subtree: true })
+}
+
 function speakBtn(label: string, fn: () => void): HTMLButtonElement {
   const b = el('button', 'speak-btn', '🔊 ' + label)
   b.type = 'button'
+  bindSpeakPulse(b)
   b.addEventListener('click', (e) => {
     e.preventDefault()
+    // Unlock + play synchronously within the user gesture
+    unlock()
+    b.classList.add('playing')
     fn()
   })
   return b
+}
+
+/** Auto-speak only after audio has been unlocked by a prior tap (mobile-safe). */
+function maybeAutoSpeak(fn: () => void, delay = 300): void {
+  if (!canAutoSpeak()) return
+  window.setTimeout(fn, delay)
 }
 
 function optionGrid(children: HTMLElement[]): HTMLElement {
@@ -106,10 +160,11 @@ function renderHearLetter(q: Question, body: HTMLElement, host: Host) {
   body.appendChild(
     speakBtn('השמיעי צליל', () => speakLetterSound(L.sound, L.keyword)),
   )
-  setTimeout(() => speakLetterSound(L.sound), 300)
+  maybeAutoSpeak(() => speakLetterSound(L.sound))
   const btns = (q.letters || []).map((l) => {
     const b = bigOpt(l.upper + ' ' + l.lower)
     b.addEventListener('click', () => {
+      unlock()
       const ok = l.id === q.correct
       host.onAnswer({ ok, chosen: l.id, confusionWith: ok ? undefined : q.correct })
     })
@@ -128,6 +183,7 @@ function renderMatchCase(q: Question, body: HTMLElement, host: Host) {
   const btns = (q.letters || []).map((l) => {
     const b = bigOpt(showUpper ? l.lower : l.upper)
     b.addEventListener('click', () => {
+      unlock()
       const ok = l.id === q.correct
       host.onAnswer({ ok, chosen: l.id, confusionWith: ok ? undefined : q.correct })
     })
@@ -227,11 +283,12 @@ function renderTrace(q: Question, body: HTMLElement, host: Host) {
 function renderStartsWith(q: Question, body: HTMLElement, host: Host) {
   const L = q.letter!
   body.appendChild(speakBtn('השמיעי צליל', () => speakLetterSound(L.sound, L.keyword)))
-  setTimeout(() => speakLetterSound(L.sound), 250)
+  maybeAutoSpeak(() => speakLetterSound(L.sound), 250)
   const btns = (q.emojis || []).map((e) => {
     const b = bigOpt(e.emoji)
     b.classList.add('emoji-opt')
     b.addEventListener('click', () => {
+      unlock()
       const ok = e.id === q.correct
       host.onAnswer({ ok, chosen: e.id, confusionWith: ok ? undefined : q.correct })
     })
@@ -254,6 +311,7 @@ function renderNameVsSound(q: Question, body: HTMLElement, host: Host) {
   const btns = (q.options || []).map((opt) => {
     const b = bigOpt(opt)
     b.addEventListener('click', () => {
+      unlock()
       const ok = opt === q.correct
       host.onAnswer({ ok, chosen: opt })
     })
@@ -265,23 +323,14 @@ function renderNameVsSound(q: Question, body: HTMLElement, host: Host) {
 function renderOralBlend(q: Question, body: HTMLElement, host: Host) {
   const play = () => {
     const sounds = q.sounds || []
-    let i = 0
-    const next = () => {
-      if (i >= sounds.length) {
-        setTimeout(() => speak(q.word!.word, { rate: 0.85 }), 350)
-        return
-      }
-      speak(sounds[i], { rate: 0.65 })
-      i++
-      setTimeout(next, 700)
-    }
-    next()
+    speakSequence(sounds, 650, q.word?.word)
   }
   body.appendChild(speakBtn('השמיעי צלילים', play))
-  setTimeout(play, 350)
+  maybeAutoSpeak(play, 350)
   const btns = (q.words || []).map((w) => {
     const b = bigOpt(`${w.emoji} ${w.word}`)
     b.addEventListener('click', () => {
+      unlock()
       const ok = w.id === q.correct
       host.onAnswer({ ok, chosen: w.id, confusionWith: ok ? undefined : q.correct })
     })
@@ -295,7 +344,7 @@ function renderBuildCvc(q: Question, body: HTMLElement, host: Host) {
   const emoji = el('div', 'preview-emoji', W.emoji)
   body.appendChild(emoji)
   body.appendChild(speakBtn('השמיעי מילה', () => speak(W.word, { rate: 0.85 })))
-  setTimeout(() => speak(W.word, { rate: 0.85 }), 300)
+  maybeAutoSpeak(() => speak(W.word, { rate: 0.85 }))
 
   const slots = el('div', 'slots')
   slots.dir = 'ltr'
@@ -320,6 +369,7 @@ function renderBuildCvc(q: Question, body: HTMLElement, host: Host) {
     const b = bigOpt(l.lower)
     b.addEventListener('click', () => {
       if (chosen.length >= 3) return
+      unlock()
       beep('tap')
       chosen.push(l.lower)
       refresh()
@@ -350,6 +400,7 @@ function renderReadCvc(q: Question, body: HTMLElement, host: Host) {
     const b = bigOpt(w.emoji)
     b.classList.add('emoji-opt')
     b.addEventListener('click', () => {
+      unlock()
       const ok = w.id === q.correct
       host.onAnswer({ ok, chosen: w.id, confusionWith: ok ? undefined : q.correct })
     })
@@ -391,6 +442,7 @@ function renderSegment(q: Question, body: HTMLElement, host: Host) {
     const b = bigOpt(l.lower)
     b.addEventListener('click', () => {
       if (chosen.length >= 3) return
+      unlock()
       beep('tap')
       chosen.push(l.id)
       refresh()
@@ -414,10 +466,11 @@ function renderSegment(q: Question, body: HTMLElement, host: Host) {
 function renderHeart(q: Question, body: HTMLElement, host: Host) {
   const H = q.heart!
   body.appendChild(speakBtn('השמיעי מילת לב', () => speak(H.word, { rate: 0.9 })))
-  setTimeout(() => speak(H.word, { rate: 0.9 }), 300)
+  maybeAutoSpeak(() => speak(H.word, { rate: 0.9 }))
   const btns = (q.hearts || []).map((h) => {
     const b = bigOpt(h.word)
     b.addEventListener('click', () => {
+      unlock()
       const ok = h.id === q.correct
       host.onAnswer({ ok, chosen: h.id, confusionWith: ok ? undefined : q.correct })
     })
@@ -427,14 +480,16 @@ function renderHeart(q: Question, body: HTMLElement, host: Host) {
 }
 
 function renderOdd(q: Question, body: HTMLElement, host: Host) {
-  body.appendChild(speakBtn('השמיעי רמז', () => {
-    ;(q.letters || []).forEach((l, i) => {
-      setTimeout(() => speakLetterSound(l.sound), i * 600)
-    })
-  }))
+  body.appendChild(
+    speakBtn('השמיעי רמז', () => {
+      const letters = q.letters || []
+      speakSequence(letters.map((l) => l.sound), 600)
+    }),
+  )
   const btns = (q.letters || []).map((l) => {
     const b = bigOpt(`${l.upper}${l.lower} ${l.emoji}`)
     b.addEventListener('click', () => {
+      unlock()
       const ok = l.id === q.correct
       host.onAnswer({ ok, chosen: l.id, confusionWith: ok ? undefined : q.correct })
     })
@@ -471,6 +526,7 @@ function renderArrange(q: Question, body: HTMLElement, host: Host) {
     remaining.set(l.lower, b)
     b.addEventListener('click', () => {
       if (b.disabled) return
+      unlock()
       beep('tap')
       chosen.push(l.lower)
       b.disabled = true
@@ -506,6 +562,7 @@ export function revealCorrect(q: Question): string {
 }
 
 export function speakCorrect(q: Question): void {
+  unlock()
   if (q.letter) speakLetterSound(q.letter.sound, q.letter.keyword)
   else if (q.word) speak(q.word.word, { rate: 0.85 })
   else if (q.heart) speak(q.heart.word, { rate: 0.9 })

@@ -1,5 +1,5 @@
 import './style.css'
-import { warmVoices, beep } from './audio'
+import { warmVoices, beep, unlock } from './audio'
 import {
   load,
   save,
@@ -16,6 +16,15 @@ import { renderQuestion, revealCorrect, speakCorrect, type AnswerResult } from '
 import { LETTERS, CVC_WORDS, HEART_WORDS, PARENT_TIPS, shuffle } from './content'
 
 warmVoices()
+
+// Unlock audio on first user gesture anywhere in the app (mobile Chrome)
+document.addEventListener(
+  'pointerdown',
+  () => {
+    unlock()
+  },
+  { once: true, capture: true },
+)
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
