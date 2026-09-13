@@ -8,12 +8,19 @@ import {
   lettersUpToCluster,
   cvcByCluster,
   cvcByVowel,
+  lettersAZ,
+  lettersInAbcGroup,
+  lettersBeforeGroup,
+  nextLetterId,
+  prevLetterId,
+  isLookalike,
   pickN,
   shuffle,
   weightedPick,
   type Letter,
   type CvcWord,
   type HeartWord,
+  type AbcGroupId,
 } from './content'
 import { load, skillWeight, type AppData } from './storage'
 
@@ -31,6 +38,9 @@ export type QType =
   | 'odd-one-out'
   | 'arrange-ltr'
   | 'direction' // M0
+  | 'hear-name'
+  | 'see-name'
+  | 'next-letter'
 
 export type Question = {
   id: string
@@ -51,9 +61,25 @@ export type Question = {
   emojis?: { emoji: string; id: string }[]
   askSound?: boolean // name-vs-sound
   arrange?: string[]
+  nameMode?: boolean
+  seqHint?: string
+  askBefore?: boolean
 }
 
-export type ModuleId = 'm0' | 'm1' | 'm2' | 'm3' | 'm4' | 'm5' | 'm6'
+export type ModuleId =
+  | 'abc-af'
+  | 'abc-gl'
+  | 'abc-mr'
+  | 'abc-sz'
+  | 'abc-review'
+  | 'abc-case'
+  | 'm0'
+  | 'm1'
+  | 'm2'
+  | 'm3'
+  | 'm4'
+  | 'm5'
+  | 'm6'
 export type ModuleOpts = { vowel?: 'a' | 'e' | 'i' | 'o' | 'u' }
 
 const SESSION_LEN = 15
@@ -70,8 +96,13 @@ function pickWord(pool: CvcWord[], data: AppData): CvcWord {
   return weightedPick(pool, (w) => skillWeight(skillOf(data, `cvc:${w.id}`)))
 }
 
-function distractorsLetters(correct: Letter, pool: Letter[], n: number): Letter[] {
-  const others = shuffle(pool.filter((l) => l.id !== correct.id)).slice(0, n)
+function distractorsLetters(correct: Letter, pool: Letter[], n: number, avoidLooks = false): Letter[] {
+  let others = pool.filter((l) => l.id !== correct.id)
+  if (avoidLooks) {
+    const safe = others.filter((l) => !isLookalike(correct.id, l.id))
+    if (safe.length >= n) others = safe
+  }
+  others = shuffle(others).slice(0, n)
   return shuffle([correct, ...others])
 }
 
@@ -332,6 +363,223 @@ function buildersForCluster(cluster: 1 | 2 | 3, data: AppData): (() => Question)
   ]
 }
 
+
+function rid(): string {
+  return Math.random().toString(36).slice(2, 7)
+}
+
+function makeHearName(letter: Letter, pool: Letter[]): Question {
+  const opts = distractorsLetters(letter, pool, 3, true)
+  return {
+    id: `hname-${letter.id}-${rid()}`,
+    type: 'hear-name',
+    promptHe: 'הקישי על האות שאת שומעת',
+    skillId: `letter:${letter.id}`,
+    skillType: 'letter',
+    letter,
+    letters: opts,
+    correct: letter.id,
+    nameMode: true,
+  }
+}
+
+function makeSeeName(letter: Letter, pool: Letter[]): Question {
+  const opts = distractorsLetters(letter, pool, 3, true)
+  return {
+    id: `sname-${letter.id}-${rid()}`,
+    type: 'see-name',
+    promptHe: 'מה שם האות?',
+    skillId: `letter:${letter.id}`,
+    skillType: 'letter',
+    letter,
+    letters: opts,
+    correct: letter.id,
+    nameMode: true,
+  }
+}
+
+function makeNextLetter(letter: Letter, az: Letter[], before = false): Question {
+  const nextId = before ? prevLetterId(letter.id) : nextLetterId(letter.id)
+  const target = az.find((l) => l.id === nextId) || az.find((l) => l.id === (before ? 'a' : 'z'))!
+  const near: Letter[] = []
+  const add = (id: string | null) => {
+    if (!id || id === target.id || id === letter.id) return
+    const L = az.find((l) => l.id === id)
+    if (L && !near.some((x) => x.id === L.id)) near.push(L)
+  }
+  add(before ? nextLetterId(letter.id) : prevLetterId(letter.id))
+  add(before ? prevLetterId(target.id) : nextLetterId(target.id))
+  add(letter.id)
+  const extras = shuffle(az.filter((l) => l.id !== target.id && l.id !== letter.id && !near.some((x) => x.id === l.id)))
+  while (near.length < 3 && extras.length) near.push(extras.pop()!)
+  const opts = shuffle([target, ...near.slice(0, 3)])
+  const i = 'abcdefghijklmnopqrstuvwxyz'.indexOf(letter.id)
+  let hint = ''
+  if (!before && i >= 0) {
+    const a = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    const start = Math.max(0, i - 2)
+    hint = `${a.slice(start, i + 1)} ?`
+  } else if (before && i >= 0) {
+    const a = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    hint = `? ${a.slice(i, Math.min(26, i + 3))}`
+  }
+  return {
+    id: `next-${letter.id}-${rid()}`,
+    type: 'next-letter',
+    promptHe: before ? 'איזו אות באה לפני?' : 'מה האות הבאה?',
+    skillId: `letter:${target.id}`,
+    skillType: 'letter',
+    letter,
+    letters: opts,
+    correct: target.id,
+    nameMode: true,
+    seqHint: hint,
+    askBefore: before,
+  }
+}
+
+function makeAbcOrder(az: Letter[]): Question {
+  const start = Math.floor(Math.random() * 24)
+  const three = az.slice(start, start + 3)
+  return {
+    id: `abcord-${rid()}`,
+    type: 'arrange-ltr',
+    promptHe: 'סדרי לפי סדר האלפבית',
+    skillId: `letter:${three[1].id}`,
+    skillType: 'letter',
+    letters: shuffle(three),
+    arrange: three.map((l) => l.lower),
+    correct: three.map((l) => l.lower).join(''),
+    nameMode: true,
+  }
+}
+
+function makeAbcOdd(az: Letter[]): Question {
+  const start = Math.floor(Math.random() * 24)
+  const consec = az.slice(start, start + 3)
+  let odd = az[Math.floor(Math.random() * az.length)]
+  let guard = 0
+  while ((Math.abs(az.indexOf(odd) - start) < 4 || consec.some((l) => l.id === odd.id)) && guard++ < 30) {
+    odd = az[Math.floor(Math.random() * az.length)]
+  }
+  return {
+    id: `abcodd-${rid()}`,
+    type: 'odd-one-out',
+    promptHe: 'מי לא שייכת לרצף ABC?',
+    skillId: `letter:${odd.id}`,
+    skillType: 'letter',
+    letters: shuffle([...consec, odd]),
+    correct: odd.id,
+    letter: odd,
+    nameMode: true,
+  }
+}
+
+function activeAbcPool(group: AbcGroupId, data: AppData): Letter[] {
+  const core = lettersInAbcGroup(group)
+  const prev = lettersBeforeGroup(group)
+  const extra: Letter[] = []
+  const seen = new Set(core.map((l) => l.id))
+  const candidates = [...prev]
+  for (let i = 0; i < 3 && candidates.length; i++) {
+    const L = weightedPick(
+      candidates.filter((c) => !extra.some((e) => e.id === c.id)),
+      (l) => skillWeight(skillOf(data, `letter:${l.id}`)),
+    )
+    if (L && !seen.has(L.id)) {
+      extra.push(L)
+      seen.add(L.id)
+    }
+  }
+  return [...core, ...extra]
+}
+
+function warmupAbc(data: AppData, pool: Letter[]): Question[] {
+  const recent = Object.values(data.skills)
+    .filter((s) => s.wrong > 0 && s.type === 'letter')
+    .sort((a, b) => b.lastWrong - a.lastWrong)
+    .slice(0, 8)
+  const qs: Question[] = []
+  for (const s of recent) {
+    if (qs.length >= 3) break
+    const id = s.id.startsWith('letter:') ? s.id.slice(7) : ''
+    const L = pool.find((l) => l.id === id) || LETTERS.find((l) => l.id === id)
+    if (L) qs.push(makeHearName(L, pool.length ? pool : lettersAZ()))
+  }
+  return qs
+}
+
+function pickSeqLetter(pool: Letter[]): Letter {
+  const cands = pool.filter((l) => l.id !== 'z')
+  return cands.length ? pickN(cands, 1)[0] : pool[0]
+}
+
+function generateAbcSession(kind: 'group' | 'review' | 'case', group: AbcGroupId | null, data: AppData): Question[] {
+  const az = lettersAZ()
+  const pool = kind === 'group' && group ? activeAbcPool(group, data) : az
+  const used = new Set<string>()
+  const out: Question[] = []
+  const push = (q: Question) => {
+    const key = `${q.type}:${q.skillId}:${q.correct}`
+    if (used.has(key) && out.length < SESSION_LEN - 1) return
+    used.add(key)
+    out.push(q)
+  }
+  warmupAbc(data, pool).forEach(push)
+
+  type Kind = 'hear' | 'see' | 'case' | 'next' | 'before' | 'order' | 'odd'
+  let recipe: Kind[]
+  if (kind === 'case') {
+    recipe = [
+      ...Array(8).fill('case'),
+      ...Array(3).fill('hear'),
+      ...Array(2).fill('see'),
+      ...Array(2).fill('next'),
+    ]
+  } else if (kind === 'review') {
+    recipe = [
+      ...Array(3).fill('hear'),
+      ...Array(2).fill('see'),
+      ...Array(2).fill('case'),
+      ...Array(4).fill('next'),
+      ...Array(2).fill('before'),
+      ...Array(2).fill('order'),
+    ]
+  } else {
+    recipe = [
+      ...Array(5).fill('hear'),
+      ...Array(4).fill('see'),
+      ...Array(2).fill('case'),
+      ...Array(2).fill('next'),
+      ...Array(1).fill('odd'),
+      ...Array(1).fill('order'),
+    ]
+  }
+  recipe = shuffle(recipe as Kind[])
+
+  const build = (k: Kind): Question => {
+    const L = pickLetter(pool, data)
+    if (k === 'hear') return makeHearName(L, pool)
+    if (k === 'see') return makeSeeName(L, pool)
+    if (k === 'case') return { ...makeMatchCase(L, pool), nameMode: true }
+    if (k === 'next') return makeNextLetter(pickSeqLetter(pool), az, false)
+    if (k === 'before') {
+      const bp = pool.filter((x) => x.id !== 'a')
+      return makeNextLetter(pickLetter(bp.length ? bp : pool, data), az, true)
+    }
+    if (k === 'order') return makeAbcOrder(az)
+    return makeAbcOdd(az)
+  }
+
+  let i = 0
+  while (out.length < SESSION_LEN) {
+    push(build(recipe[i % recipe.length]))
+    i++
+    if (i > 40) break
+  }
+  return out.slice(0, SESSION_LEN)
+}
+
 export function generateSession(module: ModuleId, opts: ModuleOpts = {}): Question[] {
   const data = load()
   const used = new Set<string>()
@@ -346,7 +594,14 @@ export function generateSession(module: ModuleId, opts: ModuleOpts = {}): Questi
     out.push(q)
   }
 
-  if (module === 'm0') {
+  if (module === 'abc-af' || module === 'abc-gl' || module === 'abc-mr' || module === 'abc-sz') {
+    const g = module.slice(4) as AbcGroupId
+    return generateAbcSession('group', g, data)
+  } else if (module === 'abc-review') {
+    return generateAbcSession('review', null, data)
+  } else if (module === 'abc-case') {
+    return generateAbcSession('case', null, data)
+  } else if (module === 'm0') {
     const letters = lettersInCluster(1)
     const words = cvcByCluster(1)
     const warm = warmupFromMistakes(data, letters, words)
@@ -438,6 +693,12 @@ export const MODULE_META: Record<
   ModuleId,
   { title: string; subtitle: string; emoji: string }
 > = {
+  'abc-af': { title: 'A–F', subtitle: 'שם האות · A B C D E F', emoji: '🅰️' },
+  'abc-gl': { title: 'G–L', subtitle: 'שם האות · G H I J K L', emoji: '🔤' },
+  'abc-mr': { title: 'M–R', subtitle: 'שם האות · M N O P Q R', emoji: '📗' },
+  'abc-sz': { title: 'S–Z', subtitle: 'שם האות · S T U V W X Y Z', emoji: '📘' },
+  'abc-review': { title: 'כל האלפבית', subtitle: 'מה האות הבאה · A–Z', emoji: '🎶' },
+  'abc-case': { title: 'גדולה ↔ קטנה', subtitle: 'A↔a  B↔b', emoji: '🔠' },
   m0: { title: 'מתחילים', subtitle: 'כיוון LTR + חיבור צלילים', emoji: '🌱' },
   m1: { title: 'אשכול 1', subtitle: 's a t i p n', emoji: '🔤' },
   m2: { title: 'אשכול 2', subtitle: 'c k e h r m d', emoji: '📗' },
@@ -446,3 +707,14 @@ export const MODULE_META: Record<
   m5: { title: 'מילות לב', subtitle: 'I a the to my is you', emoji: '💛' },
   m6: { title: 'משימות מעורבות', subtitle: 'ערבוב חכם', emoji: '🚀' },
 }
+
+export const ABC_HOME_MODULES: ModuleId[] = [
+  'abc-af',
+  'abc-gl',
+  'abc-mr',
+  'abc-sz',
+  'abc-review',
+  'abc-case',
+]
+
+export const ADVANCED_HOME_MODULES: ModuleId[] = ['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6']

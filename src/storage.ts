@@ -37,6 +37,7 @@ export type AppData = {
   streakDays: number
   lastPracticeDate: string | null
   confusions: { pair: string; count: number }[]
+  showAdvanced: boolean
 }
 
 const KEY = 'eva-english-v1'
@@ -53,6 +54,7 @@ function blank(): AppData {
     streakDays: 0,
     lastPracticeDate: null,
     confusions: [],
+    showAdvanced: false,
   }
 }
 
@@ -64,7 +66,7 @@ export function load(): AppData {
     if (!raw) return blank()
     const data = JSON.parse(raw) as AppData
     if (!data.version) return blank()
-    return { ...blank(), ...data, version: 1 }
+    return { ...blank(), ...data, version: 1, showAdvanced: !!data.showAdvanced }
   } catch {
     return mem || (mem = blank())
   }
@@ -194,6 +196,15 @@ export function getPin(data: AppData): string {
 
 export function setPin(data: AppData, pin: string): void {
   data.pin = pin
+  save(data)
+}
+
+export function getShowAdvanced(data: AppData): boolean {
+  return !!data.showAdvanced
+}
+
+export function setShowAdvanced(data: AppData, on: boolean): void {
+  data.showAdvanced = on
   save(data)
 }
 

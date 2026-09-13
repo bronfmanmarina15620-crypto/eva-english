@@ -108,6 +108,10 @@ export function renderQuestion(q: Question, host: Host): void {
   host.root.innerHTML = ''
   const card = el('div', 'qcard')
   const prompt = el('div', 'prompt', q.promptHe)
+  if (q.nameMode) {
+    const badge = el('div', 'name-badge', 'שם האות')
+    card.appendChild(badge)
+  }
   card.appendChild(prompt)
 
   const body = el('div', 'qbody')
@@ -117,6 +121,15 @@ export function renderQuestion(q: Question, host: Host): void {
   switch (q.type) {
     case 'hear-letter':
       renderHearLetter(q, body, host)
+      break
+    case 'hear-name':
+      renderHearName(q, body, host)
+      break
+    case 'see-name':
+      renderSeeName(q, body, host)
+      break
+    case 'next-letter':
+      renderNextLetter(q, body, host)
       break
     case 'match-case':
       renderMatchCase(q, body, host)
@@ -163,6 +176,69 @@ function renderHearLetter(q: Question, body: HTMLElement, host: Host) {
   maybeAutoSpeak(() => speakLetterSound(L.sound))
   const btns = (q.letters || []).map((l) => {
     const b = bigOpt(l.upper + ' ' + l.lower)
+    b.addEventListener('click', () => {
+      unlock()
+      const ok = l.id === q.correct
+      host.onAnswer({ ok, chosen: l.id, confusionWith: ok ? undefined : q.correct })
+    })
+    return b
+  })
+  body.appendChild(optionGrid(btns))
+}
+
+function renderHearName(q: Question, body: HTMLElement, host: Host) {
+  const L = q.letter!
+  body.appendChild(speakBtn('השמיעי שם האות', () => speakLetterName(L.name)))
+  maybeAutoSpeak(() => speakLetterName(L.name))
+  const btns = (q.letters || []).map((l) => {
+    const b = bigOpt(l.upper + ' ' + l.lower)
+    b.addEventListener('click', () => {
+      unlock()
+      const ok = l.id === q.correct
+      host.onAnswer({ ok, chosen: l.id, confusionWith: ok ? undefined : q.correct })
+    })
+    return b
+  })
+  body.appendChild(optionGrid(btns))
+}
+
+function renderSeeName(q: Question, body: HTMLElement, host: Host) {
+  const L = q.letter!
+  const preview = el('div', 'preview-letter', L.upper + ' ' + L.lower)
+  preview.dir = 'ltr'
+  body.appendChild(preview)
+  body.appendChild(speakBtn('השמיעי שם האות', () => speakLetterName(L.name)))
+  const row = el('div', 'opt-grid')
+  ;(q.letters || []).forEach((l) => {
+    const wrap = el('div', 'name-opt')
+    const hear = speakBtn(l.upper, () => speakLetterName(l.name))
+    hear.classList.add('name-opt-speak')
+    const pick = bigOpt(l.upper)
+    pick.addEventListener('click', () => {
+      unlock()
+      speakLetterName(l.name)
+      const ok = l.id === q.correct
+      host.onAnswer({ ok, chosen: l.id, confusionWith: ok ? undefined : q.correct })
+    })
+    wrap.append(hear, pick)
+    row.appendChild(wrap)
+  })
+  body.appendChild(row)
+}
+
+function renderNextLetter(q: Question, body: HTMLElement, host: Host) {
+  const L = q.letter!
+  const preview = el('div', 'preview-letter', L.upper)
+  preview.dir = 'ltr'
+  body.appendChild(preview)
+  if (q.seqHint) {
+    const hint = el('div', 'seq-hint', q.seqHint)
+    hint.dir = 'ltr'
+    body.appendChild(hint)
+  }
+  body.appendChild(speakBtn('השמיעי שם האות', () => speakLetterName(L.name)))
+  const btns = (q.letters || []).map((l) => {
+    const b = bigOpt(l.upper)
     b.addEventListener('click', () => {
       unlock()
       const ok = l.id === q.correct
@@ -481,9 +557,9 @@ function renderHeart(q: Question, body: HTMLElement, host: Host) {
 
 function renderOdd(q: Question, body: HTMLElement, host: Host) {
   body.appendChild(
-    speakBtn('השמיעי רמז', () => {
+    speakBtn(q.nameMode ? 'השמיעי שמות' : 'השמיעי רמז', () => {
       const letters = q.letters || []
-      speakSequence(letters.map((l) => l.sound), 600)
+      speakSequence(letters.map((l) => (q.nameMode ? l.name : l.sound)), 600)
     }),
   )
   const btns = (q.letters || []).map((l) => {
@@ -554,6 +630,7 @@ function renderArrange(q: Question, body: HTMLElement, host: Host) {
 }
 
 export function revealCorrect(q: Question): string {
+  if (q.type === 'next-letter') return (q.correct || '').toUpperCase()
   if (q.type === 'build-cvc' || q.type === 'arrange-ltr' || q.type === 'direction') return q.correct || ''
   if (q.letter) return `${q.letter.upper}/${q.letter.lower}`
   if (q.word) return q.word.word
@@ -563,6 +640,11 @@ export function revealCorrect(q: Question): string {
 
 export function speakCorrect(q: Question): void {
   unlock()
+  if (q.nameMode) {
+    const id = q.type === 'next-letter' ? q.correct : q.letter?.name || q.correct
+    if (id) speakLetterName(id)
+    return
+  }
   if (q.letter) speakLetterSound(q.letter.sound, q.letter.keyword)
   else if (q.word) speak(q.word.word, { rate: 0.85 })
   else if (q.heart) speak(q.heart.word, { rate: 0.9 })

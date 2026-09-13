@@ -1,5 +1,5 @@
 import './style.css'
-import { warmVoices, beep, unlock } from './audio'
+import { warmVoices, beep, unlock, stopAudio, speakAlphabetChant } from './audio'
 import {
   load,
   save,
@@ -10,10 +10,20 @@ import {
   getPin,
   setPin,
   todayKey,
+  getShowAdvanced,
+  setShowAdvanced,
 } from './storage'
-import { generateSession, MODULE_META, type ModuleId, type Question, type ModuleOpts } from './session'
+import {
+  generateSession,
+  MODULE_META,
+  ABC_HOME_MODULES,
+  ADVANCED_HOME_MODULES,
+  type ModuleId,
+  type Question,
+  type ModuleOpts,
+} from './session'
 import { renderQuestion, revealCorrect, speakCorrect, type AnswerResult } from './questions'
-import { LETTERS, CVC_WORDS, HEART_WORDS, PARENT_TIPS, shuffle } from './content'
+import { CVC_WORDS, HEART_WORDS, PARENT_TIPS, PHONICS_TIPS, lettersAZ, shuffle } from './content'
 
 warmVoices()
 
@@ -41,6 +51,7 @@ let triedOnce = false
 let currentModule: ModuleId = 'm1'
 let currentLabel = ''
 let moduleOpts: ModuleOpts = {}
+let songPlaying = false
 
 function pct(a: number, b: number): string {
   if (!b) return '—'
@@ -70,26 +81,43 @@ function shell(inner: string, topRight?: string): void {
 
 function renderHome(): void {
   const unlocked = mixedUnlocked(data)
-  const mods: { id: ModuleId | 'parent'; title: string; subtitle: string; emoji: string; locked?: boolean; sub?: string }[] = [
-    { id: 'm0', ...MODULE_META.m0 },
-    { id: 'm1', ...MODULE_META.m1 },
-    { id: 'm2', ...MODULE_META.m2 },
-    { id: 'm3', ...MODULE_META.m3 },
-    { id: 'm4', ...MODULE_META.m4 },
-    { id: 'm5', ...MODULE_META.m5 },
-    { id: 'm6', ...MODULE_META.m6, locked: !unlocked },
-  ]
+  const showAdv = getShowAdvanced(data)
+  const abcMods = ABC_HOME_MODULES.map((id) => ({ id, ...MODULE_META[id] }))
+  const advMods = showAdv
+    ? ADVANCED_HOME_MODULES.map((id) => ({
+        id,
+        ...MODULE_META[id],
+        locked: id === 'm6' && !unlocked,
+      }))
+    : []
+
+  const az = lettersAZ()
+  const strip = az
+    .map((l) => {
+      const st = letterStrength(l.id)
+      return `<span class="${st}" title="${l.upper}">${l.upper}</span>`
+    })
+    .join('')
+
   shell(
     `
-    <p class="lead">בואי נתרגל אנגלית — צלילים, אותיות ומילים קצרות</p>
+    <p class="lead">עכשיו מתרגלים <strong>שם האות</strong> — איך קוראים לאות (A, B, C). אחר כך נוסיף מה האות אומרת במילה.</p>
+    <button class="song-btn${songPlaying ? ' playing' : ''}" id="abcSong" type="button">${songPlaying ? '■ עצרי שיר' : '🎶 שירי ABC'}</button>
+    <p class="note">השיר עוזר לזכור את הרצף — אחריו כדאי סשן 15 שאלות</p>
+    <div class="abc-strip" dir="ltr">${strip}</div>
     <div class="mod-grid" id="mods"></div>
+    ${
+      showAdv
+        ? `<h3 class="adv-heading">עוד נושאים</h3><div class="mod-grid" id="advMods"></div>`
+        : ''
+    }
     <button class="ghost parent-btn" id="btnParent">הורים / התקדמות</button>
-    <p class="note">כל תרגול = 15 שאלות · אפשר לעצור ולחזור</p>
+    <p class="note">כל תרגול = 15 שאלות · שם האות בלבד (לא הצליל)</p>
     `,
     '',
   )
-  const grid = app.querySelector('#mods')!
-  mods.forEach((m) => {
+
+  const bindMod = (m: { id: ModuleId; title: string; subtitle: string; emoji: string; locked?: boolean }, grid: Element) => {
     const b = document.createElement('button')
     b.type = 'button'
     b.className = 'mod-card' + (m.locked ? ' locked' : '')
@@ -104,10 +132,40 @@ function renderHome(): void {
         render()
         return
       }
-      startModule(m.id as ModuleId)
+      startModule(m.id)
     })
     grid.appendChild(b)
+  }
+
+  const grid = app.querySelector('#mods')!
+  abcMods.forEach((m) => bindMod(m, grid))
+  if (showAdv) {
+    const ag = app.querySelector('#advMods')!
+    advMods.forEach((m) => bindMod(m, ag))
+  }
+
+  app.querySelector('#abcSong')!.addEventListener('click', () => {
+    const btn = app.querySelector<HTMLButtonElement>('#abcSong')!
+    if (songPlaying) {
+      stopAudio()
+      songPlaying = false
+      btn.textContent = '🎶 שירי ABC'
+      btn.classList.remove('playing')
+      return
+    }
+    unlock()
+    songPlaying = true
+    btn.textContent = '■ עצרי שיר'
+    btn.classList.add('playing')
+    speakAlphabetChant(() => {
+      songPlaying = false
+      if (btn.isConnected) {
+        btn.textContent = '🎶 שירי ABC'
+        btn.classList.remove('playing')
+      }
+    })
   })
+
   app.querySelector('#btnParent')!.addEventListener('click', () => {
     screen = 'pin'
     render()
@@ -151,6 +209,8 @@ function renderCvcPick(): void {
 }
 
 function startModule(id: ModuleId): void {
+  stopAudio()
+  songPlaying = false
   currentModule = id
   currentLabel = MODULE_META[id].title
   questions = generateSession(id, moduleOpts)
@@ -263,7 +323,8 @@ function handleAnswer(r: AnswerResult, msg: HTMLElement, host: HTMLElement): voi
 }
 
 function renderEnd(): void {
-  const tip = shuffle(PARENT_TIPS)[0]
+  const tipPool = getShowAdvanced(data) ? [...PARENT_TIPS, ...PHONICS_TIPS] : PARENT_TIPS
+  const tip = shuffle(tipPool)[0]
   const stars = Math.max(1, Math.round((correctCount / 15) * 5))
   shell(
     `
@@ -356,12 +417,14 @@ function renderParent(): void {
   const conf = data.confusions.slice(0, 5)
   const sessions = data.sessions.slice(0, 10)
 
-  // strengths / weaknesses
-  const letterStats = LETTERS.filter((l) => l.cluster <= 3)
+  const azLetters = lettersAZ()
+  const mastered = azLetters.filter((l) => letterStrength(l.id) === 'g').length
+  // strengths / weaknesses — A–Z name map
+  const letterStats = azLetters
     .map((l) => {
       const s = data.skills[`letter:${l.id}`]
       const rate = s && s.seen ? s.correct / s.seen : -1
-      return { id: l.id, rate, seen: s?.seen || 0 }
+      return { id: l.upper, rate, seen: s?.seen || 0 }
     })
     .filter((x) => x.seen > 0)
   const strong = letterStats.filter((x) => x.rate >= 0.75).map((x) => x.id)
@@ -377,16 +440,23 @@ function renderParent(): void {
       <div class="stats">
         <div class="chip"><b>${data.streakDays || 0}</b><small>רצף ימים</small></div>
         <div class="chip"><b>${data.sessions.length}</b><small>סשנים</small></div>
-        <div class="chip"><b>${data.completedClusterSessions.length}/3</b><small>אשכולות</small></div>
+        <div class="chip"><b>${mastered}/26</b><small>שמות חזקים</small></div>
       </div>
     </div>
 
     <h3>14 הימים האחרונים</h3>
     <div class="days" id="days"></div>
 
-    <h3>מפת אותיות</h3>
+    <h3>מפת שמות אותיות A–Z</h3>
     <div class="alpha-map" id="amap" dir="ltr"></div>
-    <p class="note">ירוק=חזק · צהוב=בינוני · אדום=לתרגל · אפור=עדיין לא</p>
+    <p class="note">ירוק=חזק · צהוב=בינוני · אדום=לתרגל · אפור=עדיין לא · שם האות</p>
+
+    <div class="panel">
+      <label class="toggle-row">
+        <input type="checkbox" id="advToggle" ${getShowAdvanced(data) ? 'checked' : ''} />
+        <span><strong>הצג נושאים מתקדמים</strong><br><small>צלילים, SATPIN, CVC, מילות לב — כבוי כברירת מחדל. אווה רואה רק ABC.</small></span>
+      </label>
+    </div>
 
     <h3>דיוק CVC לפי תנועה</h3>
     <div id="vow"></div>
@@ -421,13 +491,19 @@ function renderParent(): void {
   })
 
   const amap = app.querySelector('#amap')!
-  LETTERS.filter((l) => l.cluster <= 3).forEach((l) => {
+  lettersAZ().forEach((l) => {
     const c = document.createElement('div')
     const st = letterStrength(l.id)
     c.className = 'acell ' + st
-    c.textContent = l.lower
-    c.title = l.id
+    c.textContent = l.upper
+    c.title = `${l.upper} ${l.lower}`
     amap.appendChild(c)
+  })
+
+  app.querySelector('#advToggle')!.addEventListener('change', (e) => {
+    const on = (e.target as HTMLInputElement).checked
+    setShowAdvanced(data, on)
+    data = load()
   })
 
   app.querySelector('#vow')!.innerHTML = vowelAcc
@@ -445,7 +521,7 @@ function renderParent(): void {
   app.querySelector('#sw')!.innerHTML = `
     <p><strong>חזק:</strong> ${strong.length ? strong.join(', ') : 'עוד מוקדם'}</p>
     <p><strong>לתרגל:</strong> ${weak.length ? weak.join(', ') : 'מצוין — אין חולשה בולטת'}</p>
-    <p class="note">Mixed נעול עד 2 אשכולות: כרגע ${data.completedClusterSessions.join(', ') || 'אין'}</p>
+    <p class="note">מצב נוכחי: שם האות (ABC). נושאים מתקדמים ${getShowAdvanced(data) ? 'גלויים' : 'מוסתרים'} בבית.</p>
   `
 
   const tb = app.querySelector('#sess tbody')!
@@ -499,7 +575,7 @@ function buildWhatsAppReport(): string {
     '📊 דוח אווה אנגלית',
     `רצף ימים: ${d.streakDays || 0}`,
     `סשנים: ${d.sessions.length}`,
-    `אשכולות שהושלמו: ${d.completedClusterSessions.join(', ') || '—'}`,
+    `שמות אותיות חזקים: ${lettersAZ().filter((l) => letterStrength(l.id) === 'g').map((l) => l.upper).join(' ') || '—'}`,
     '',
     'אחרונים:',
     ...d.sessions.slice(0, 5).map((s) => {

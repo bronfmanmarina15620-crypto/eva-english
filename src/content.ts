@@ -117,17 +117,78 @@ export const HEART_WORDS: HeartWord[] = [
 ]
 
 export const PARENT_TIPS = [
-  'כללי זהב: שמעו יחד את צליל האות — לא רק את השם שלה.',
+  'עכשיו מתרגלים איך קוראים לאות (A, B, C). אחר כך נוסיף מה האות אומרת במילה.',
+  'שמעו יחד שיר ABC פעם אחת, ואז סשן 15 שאלות — השיר תומך, לא מחליף תרגול.',
   'תרגלו בקצרה: 10–15 דקות ביום עדיפות על שעה אחת בשבוע.',
   'חגגו ניסיונות, לא רק תשובות נכונות — אווה לומדת לבטוח בעצמה.',
-  'כשאווה קוראת מילה, בקשו ממנה "לשבור" אותה לצלילים: /c/ /a/ /t/.',
-  'אל תמהרו לאלפבית A→Z. הסדר SATPIN בונה מילים מהר יותר.',
-  'Heart words (I, the, to…) לומדים כתמונה שלמה — לא תמיד אפשר לבטא.',
-  'שחקו "מצאי אות שמתחילה ב…" בבית עם חפצים אמיתיים.',
+  'בסוף הסשן בקשו מאווה להגיד 5 אותיות באקראי מהמסך: "מה שם האות הזו?"',
+  'אם מתבלבלת בין שם לצליל: "זה השם בשיר; הצליל נלמד אחר כך."',
   'אם יש בלבול בין b ל־d — תרגלו כל אחת בנפרד עם תנועה גדולה.',
   'שלחו לה הודעה קצרה באנגלית פשוטה: Hi Eva! 🌟',
-  'המפה בצבעים במסך ההורים מראה מה כבר חזק ומה לתרגל שוב.',
+  'המפה בצבעים במסך ההורים מראה אילו שמות אותיות כבר חזקים.',
+  'כשכ־20 מתוך 26 שמות יציבים — אפשר לפתוח נושאים מתקדמים (צלילים).',
 ]
+
+export const PHONICS_TIPS = [
+  'כללי זהב: שמעו יחד את צליל האות — לא רק את השם שלה.',
+  'כשאווה קוראת מילה, בקשו ממנה "לשבור" אותה לצלילים: /c/ /a/ /t/.',
+  'Heart words (I, the, to…) לומדים כתמונה שלמה — לא תמיד אפשר לבטא.',
+  'שחקו "מצאי אות שמתחילה ב…" בבית עם חפצים אמיתיים.',
+]
+
+
+export type AbcGroupId = 'af' | 'gl' | 'mr' | 'sz'
+
+export const ABC_GROUPS: { id: AbcGroupId; title: string; ids: string[] }[] = [
+  { id: 'af', title: 'A–F', ids: ['a', 'b', 'c', 'd', 'e', 'f'] },
+  { id: 'gl', title: 'G–L', ids: ['g', 'h', 'i', 'j', 'k', 'l'] },
+  { id: 'mr', title: 'M–R', ids: ['m', 'n', 'o', 'p', 'q', 'r'] },
+  { id: 'sz', title: 'S–Z', ids: ['s', 't', 'u', 'v', 'w', 'x', 'y', 'z'] },
+]
+
+export const AZ_IDS = 'abcdefghijklmnopqrstuvwxyz'.split('')
+
+export function lettersAZ(): Letter[] {
+  return AZ_IDS.map((id) => LETTERS.find((l) => l.id === id)!).filter(Boolean)
+}
+
+export function lettersInAbcGroup(group: AbcGroupId): Letter[] {
+  const g = ABC_GROUPS.find((x) => x.id === group)!
+  return g.ids.map((id) => LETTERS.find((l) => l.id === id)!).filter(Boolean)
+}
+
+export function lettersBeforeGroup(group: AbcGroupId): Letter[] {
+  const order: AbcGroupId[] = ['af', 'gl', 'mr', 'sz']
+  const i = order.indexOf(group)
+  return order.slice(0, Math.max(0, i)).flatMap((id) => lettersInAbcGroup(id))
+}
+
+export function nextLetterId(id: string): string | null {
+  const i = AZ_IDS.indexOf(id)
+  if (i < 0 || i >= 25) return null
+  return AZ_IDS[i + 1]
+}
+
+export function prevLetterId(id: string): string | null {
+  const i = AZ_IDS.indexOf(id)
+  if (i <= 0) return null
+  return AZ_IDS[i - 1]
+}
+
+export function isLookalike(a: string, b: string): boolean {
+  const pairs = [
+    ['b', 'd'],
+    ['b', 'p'],
+    ['d', 'p'],
+    ['m', 'n'],
+    ['e', 'f'],
+    ['i', 'j'],
+    ['u', 'v'],
+    ['c', 'o'],
+    ['g', 'q'],
+  ]
+  return pairs.some(([x, y]) => (a === x && b === y) || (a === y && b === x))
+}
 
 export function lettersInCluster(c: 1 | 2 | 3 | 4): Letter[] {
   return LETTERS.filter((l) => l.cluster === c)

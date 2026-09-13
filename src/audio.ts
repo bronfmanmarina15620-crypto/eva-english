@@ -7,6 +7,7 @@ let unlocked = false
 let hasPlayedMedia = false
 let currentAudio: HTMLAudioElement | null = null
 let voicesReady: Promise<void> | null = null
+let playGen = 0
 
 export type SpeakOpts = { rate?: number; lang?: string }
 
@@ -72,6 +73,11 @@ function emit(name: string, detail?: unknown): void {
   } catch {
     /* ignore */
   }
+}
+
+export function stopAudio(): void {
+  playGen++
+  stopCurrent()
 }
 
 function stopCurrent(): void {
@@ -368,15 +374,19 @@ export function speakLetterName(name: string): void {
 }
 
 /** Play a sequence of texts with gaps (for oral blend). First item plays sync if from click. */
-export function speakSequence(parts: string[], gapMs = 650, finalWord?: string): void {
+export function speakSequence(parts: string[], gapMs = 650, finalWord?: string, onDone?: () => void): void {
+  const gen = ++playGen
   if (!parts.length) {
     if (finalWord) speak(finalWord)
+    onDone?.()
     return
   }
   let i = 0
   const next = () => {
+    if (gen !== playGen) return
     if (i >= parts.length) {
       if (finalWord) setTimeout(() => speak(finalWord, { rate: 0.85 }), 350)
+      onDone?.()
       return
     }
     const part = parts[i++]
@@ -401,6 +411,12 @@ export function speakSequence(parts: string[], gapMs = 650, finalWord?: string):
     }
   }
   next()
+}
+
+/** A–Z letter NAMES chant (name-*.mp3), support for ABC sequence — not a substitute for retrieval. */
+export function speakAlphabetChant(onDone?: () => void): void {
+  const names = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+  speakSequence(names, 380, undefined, onDone)
 }
 
 export function beep(kind: 'ok' | 'no' | 'tap' = 'tap'): void {
