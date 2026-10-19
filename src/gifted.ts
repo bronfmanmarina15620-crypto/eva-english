@@ -19,6 +19,7 @@ export type GItem = {
   options: string[] // html, correct is options[correct]
   correct: number
   plain: string // short text description for the help list (does not include answer)
+  diff: 1 | 2 | 3
 }
 
 function rng(seed: number) {
@@ -40,9 +41,9 @@ function shuffleWith<T>(arr: T[], r: () => number): T[] {
   return a
 }
 
-function pack(id: string, type: GType, stem: string, right: string, wrongs: string[], plain: string, r: () => number): GItem {
+function pack(id: string, type: GType, stem: string, right: string, wrongs: string[], plain: string, r: () => number, diff: 1 | 2 | 3 = 2): GItem {
   const opts = shuffleWith([right, ...wrongs.slice(0, 3)], r)
-  return { id, type, stem, options: opts, correct: opts.indexOf(right), plain }
+  return { id, type, stem, options: opts, correct: opts.indexOf(right), plain, diff }
 }
 
 // ---------- 1. Verbal analogies ----------
@@ -91,6 +92,18 @@ const ANALOGIES: [string, string[], string[][]][] = [
   ['מטבע : ארנק', ['כרית', 'מיטה'], [['שקל', 'כסף'], ['כוס', 'מים'], ['מפתח', 'דלת']]],
   ['ירקן : ירקות', ['אופה', 'לחם'], [['רופא', 'חולה'], ['נהג', 'כביש'], ['צלם', 'מצלמה']]],
   ['לחש : צעקה', ['טפטוף', 'מבול'], [['שמש', 'חום'], ['רוח', 'עננים'], ['גשם', 'מטרייה']]],
+  ['מזרק : הזרקה', ['מקדחה', 'קידוח'], [['פטיש', 'כלי'], ['מברשת', 'מסרק'], ['סיר', 'ארוחה']]],
+  ['ציפור : גוזל', ['סוס', 'סייח'], [['סוס', 'עגלה'], ['סוס', 'חמור'], ['סוס', 'תבן']]],
+  ['עייר : חמור', ['טלה', 'כבש'], [['כבש', 'צמר'], ['גמל', 'דבשת'], ['חמור', 'עגלה']]],
+  ['חול : זכוכית', ['ענבים', 'יין'], [['ים', 'חוף'], ['זכוכית', 'חלון'], ['גפן', 'ענבים']]],
+  ['אפודה : בגד', ['מברג', 'כלי עבודה'], [['גופייה', 'קיץ'], ['צמר', 'סוודר'], ['משפחה', 'בית']]],
+  ['לעוף : נחליאלי', ['לזחול', 'נחש'], [['לצוד', 'אריה'], ['לאכול', 'כלב'], ['לישון', 'חתול']]],
+  ['רעב : לאכול', ['עייף', 'לנוח'], [['שבע', 'לבשל'], ['שמח', 'לבכות'], ['צמא', 'מלח']]],
+  ['ספר : פרק', ['שיר', 'בית'], [['ספר', 'ספרייה'], ['מכתב', 'בול'], ['מחברת', 'עט']]],
+  ['תמים : לחשוד', ['שקט', 'להרעיש'], [['רגוע', 'לנוח'], ['שמח', 'לחייך'], ['חכם', 'ללמוד']]],
+  ['להציץ : להסתכל', ['ללגום', 'לשתות'], [['לרוץ', 'ללכת'], ['לצעוק', 'לדבר'], ['לזרוק', 'לתפוס']]],
+  ['מאה : שנה', ['עשור', 'שנה'], [['שבוע', 'חודש'], ['דקה', 'שנייה'], ['יום', 'לילה']]],
+  ['סקרן : לשאול', ['נדיב', 'לתת'], [['עצלן', 'לעבוד'], ['פחדן', 'להעז'], ['קמצן', 'לחלק']]],
 ]
 
 // ---------- 2. Sentence completion ----------
@@ -134,9 +147,17 @@ const SENTENCES: [string, string, string[]][] = [
   ['כשהגענו לתחנה, האוטובוס כבר ______, ולכן ______ לחכות לאוטובוס הבא.', 'נסע / נאלצנו', ['הגיע / נאלצנו', 'נסע / לא היינו צריכים', 'עמד / רצינו']],
   ['______ שתמר הייתה חולה, היא ______ לבית הספר.', 'מכיוון / לא הלכה', ['מכיוון / הלכה מוקדם', 'למרות / לא הלכה', 'כדי / הלכה']],
   ['הדייג ______ כל הבוקר, אך ______ לא דג אף דג.', 'ישב ליד המים / בסוף', ['ישן בבית / בסוף', 'ישב ליד המים / לכן', 'שחה בים / תמיד']],
+  ['______ הייתה מיכל ______, היא הסבירה לכל הכיתה את התרגיל הקשה.', 'אף על פי ש / הצעירה בכיתה', ['מפני ש / חולה', 'כי / עייפה מאוד', 'בגלל ש / הנמוכה בכיתה']],
+  ['במאפייה שני סוגי לחם: האחד ______ והשני ______, ולכן כל אחד מצא מה שאהב.', 'מתוק / מלוח', ['טרי / טרי', 'מתוק / מתוק', 'גדול / ענק']],
+  ['______ ידעתי שהמשחק בוטל, ______ נשארתי בבית ______ לנסוע סתם.', 'אילו / הייתי / במקום', ['כי / הייתי / כדי', 'אילו / לא הייתי / במקום', 'אחרי ש / הלכתי / כדי']],
+  ['המורה ______ להכניס טלפונים לכיתה, כי היא ______ שהם מפריעים ללמידה.', 'אוסרת / חושבת', ['מרשה / חושבת', 'אוסרת / שוכחת', 'מבקשת / לא יודעת']],
+  ['יואב ______ לבוא לטיול, אבל ברגע האחרון ______ ונשאר בבית.', 'הבטיח / חזר בו', ['סירב / חזר בו', 'הבטיח / התעקש', 'שכח / נזכר']],
+  ['השבוע ירד גשם ______ ימים ברציפות, ולכן הנחל ______ מים לראשונה מזה שנים.', 'שלושה / התמלא', ['שלושה / התייבש', 'אפס / התמלא', 'מעט / נשפך']],
+  ['______ שהכלב נבח בקול רם, התינוק ______ להמשיך לישון.', 'למרות / הצליח', ['כיוון / הצליח', 'למרות / התעורר ולא הצליח', 'כדי / ניסה']],
 ]
 
 // ---------- builders ----------
+const AN_EASY = new Set([0, 1, 2, 3, 6, 10, 16, 20, 22, 27])
 function buildAnalogies(): GItem[] {
   const r = rng(11)
   return ANALOGIES.map(([pair, right, wrongs], i) =>
@@ -148,14 +169,21 @@ function buildAnalogies(): GItem[] {
       wrongs.map((w) => `${w[0]} : ${w[1]}`),
       `קשר בין מילים: ${pair}`,
       r,
+      AN_EASY.has(i) ? 1 : i >= 32 && ![38, 39, 41, 42, 46].includes(i) ? 3 : 2,
     ),
   )
 }
 
+function sentDiff(s: string, right: string): 1 | 2 | 3 {
+  const blanks = right.split('/').length
+  if (blanks >= 3 || /אף על פי|למרות|ובכל זאת|שלשום|אתמול|במקום|לא רק/.test(s + right)) return 3
+  if (/גם \/ וגם|קודם|זורחת|הם פירות|לובשים/.test(s + right)) return 1
+  return 2
+}
 function buildSentences(): GItem[] {
   const r = rng(22)
   return SENTENCES.map(([s, right, wrongs], i) =>
-    pack(`se${i}`, 'sentence', `<div class="g-sent">${s}</div>`, right, wrongs, `השלמת משפט: ${s}`, r),
+    pack(`se${i}`, 'sentence', `<div class="g-sent">${s}</div>`, right, wrongs, `השלמת משפט: ${s}`, r, sentDiff(s, right)),
   )
 }
 
@@ -215,38 +243,50 @@ function buildWordProblems(): GItem[] {
       q = `${n} ${g('יצאה', 'יצא')} לטיול בשעה ${start}:00. הטיול נמשך ${dur} שעות ו־${mins} דקות. באיזו שעה הסתיים הטיול?`
       const end = `${start + dur}:${mins}`
       items.push(pack(`wp${i}`, 'word', `<div class="g-sent">${q}</div>`, end,
-        [`${start + dur + 1}:${mins}`, `${start + dur}:00`, `${start + dur - 1}:${mins}`], `בעיה מילולית: ${q}`, r))
+        [`${start + dur + 1}:${mins}`, `${start + dur}:00`, `${start + dur - 1}:${mins}`], `בעיה מילולית: ${q}`, r, 2))
       continue
     } else {
       const price = ri(3, 8), k = ri(3, 6)
       q = `${k} עפרונות עולים ${price * k} שקלים. כמה יעלו ${k * 2} עפרונות כאלה?`
       ans = price * k * 2; wrong = [price * k + 2, price * 2, price * k + k]
     }
-    items.push(pack(`wp${i}`, 'word', `<div class="g-sent">${q}</div>`, String(ans), nums(ans, wrong), `בעיה מילולית: ${q}`, r))
+    items.push(pack(`wp${i}`, 'word', `<div class="g-sent">${q}</div>`, String(ans), nums(ans, wrong), `בעיה מילולית: ${q}`, r, t === 4 || t === 7 ? 3 : 2))
   }
   // official-style extras: division into groups, unit ratio, missing number, digit riddles
-  const extras: [string, number, number[]][] = []
+  const extras: [string, number, number[], 1 | 2 | 3][] = []
   for (let i = 0; i < 6; i++) {
     const per = ri(2, 4), people = ri(5, 9)
-    extras.push([`כל אחד מהילדים במסיבה קיבל ${per} בלונים. בסך הכול חילקו ${per * people} בלונים. כמה ילדים היו במסיבה?`, people, [people - 1, per * people - per, people * 2]])
+    extras.push([`כל אחד מהילדים במסיבה קיבל ${per} בלונים. בסך הכול חילקו ${per * people} בלונים. כמה ילדים היו במסיבה?`, people, [people - 1, per * people - per, people * 2], 1])
     const rows = ri(12, 19), seats = ri(11, 13)
-    extras.push([`בתיאטרון יש ${rows} שורות. בכל שורה ${seats} כיסאות. כמה כיסאות יש בתיאטרון בסך הכול?`, rows * seats, [rows + seats, rows * 10, rows * seats - 10]])
+    extras.push([`בתיאטרון יש ${rows} שורות. בכל שורה ${seats} כיסאות. כמה כיסאות יש בתיאטרון בסך הכול?`, rows * seats, [rows + seats, rows * 10, rows * seats - 10], 2])
     const boxes = ri(4, 6), per2 = ri(5, 9), sold = ri(2, 3)
-    extras.push([`בחנות יש ${boxes * per2} כדורים. המוכר חילק אותם שווה בשווה ל־${boxes} ארגזים. הוא מכר ${sold} ארגזים. כמה כדורים מכר?`, per2 * sold, [per2, sold * boxes, per2 * sold + per2]])
+    extras.push([`בחנות יש ${boxes * per2} כדורים. המוכר חילק אותם שווה בשווה ל־${boxes} ארגזים. הוא מכר ${sold} ארגזים. כמה כדורים מכר?`, per2 * sold, [per2, sold * boxes, per2 * sold + per2], 3])
     const n = ri(10, 20), m = ri(3, 6)
-    extras.push([`${n} קוביות שוקלות ק״ג אחד. כמה קילוגרמים שוקלות ${n * m} קוביות כאלה?`, m, [m + 1, m * 2, n]])
+    extras.push([`${n} קוביות שוקלות ק״ג אחד. כמה קילוגרמים שוקלות ${n * m} קוביות כאלה?`, m, [m + 1, m * 2, n], 3])
     const a = ri(3, 6), b = ri(4, 8), c = ri(5, 12)
-    if (a * b > c) extras.push([`לפניכם תרגיל שחסר בו מספר: ${c} + ? = ${a} × ${b}. מהו המספר החסר?`, a * b - c, [a * b, a * b + c, a + b]])
+    if (a * b > c) extras.push([`לפניכם תרגיל שחסר בו מספר: ${c} + ? = ${a} × ${b}. מהו המספר החסר?`, a * b - c, [a * b, a * b + c, a + b], 2])
   }
   extras
     .filter((e) => e[1] > 0)
-    .forEach(([q, ans, w], k) => items.push(pack(`wx${k}`, 'word', `<div class="g-sent">${q}</div>`, String(ans), nums(ans, w), `בעיה מילולית: ${q}`, r)))
+    .forEach(([q, ans, w, d], k) => items.push(pack(`wx${k}`, 'word', `<div class="g-sent">${q}</div>`, String(ans), nums(ans, w), `בעיה מילולית: ${q}`, r, d)))
+  // top-of-range: unit rate then scale, part of whole, ages, multi-step
+  for (let i = 0; i < 8; i++) {
+    const unit = ri(3, 7), k1 = ri(3, 5), k2 = ri(6, 9)
+    const q1 = `${k1} מחברות עולות ${unit * k1} שקלים. כמה יעלו ${k2} מחברות כאלה?`
+    items.push(pack(`wh${i}a`, 'word', `<div class="g-sent">${q1}</div>`, String(unit * k2), nums(unit * k2, [unit * k1 + k2, unit * (k2 - 1), unit * k1 * 2]), `בעיה מילולית: ${q1}`, r, 3))
+    const g = ri(2, 4), tot = g * ri(3, 6), part = tot / g
+    const q2 = `בסל ${tot} פירות. ${part} מהם תפוחים והשאר אגסים. כמה אגסים יותר מתפוחים יש בסל?`
+    items.push(pack(`wh${i}b`, 'word', `<div class="g-sent">${q2}</div>`, String(tot - 2 * part), nums(tot - 2 * part, [tot - part, part, tot - part + 1]), `בעיה מילולית: ${q2}`, r, 3))
+    const kid = ri(6, 9), dad = kid * ri(4, 5), yrs = ri(2, 5)
+    const q3 = `היום אבא בן ${dad} ונועם בן ${kid}. בעוד ${yrs} שנים, בן כמה יהיה אבא יותר מנועם?`
+    items.push(pack(`wh${i}c`, 'word', `<div class="g-sent">${q3}</div>`, String(dad - kid), nums(dad - kid, [dad - kid + yrs, dad - kid - yrs, dad + yrs - kid + yrs]), `בעיה מילולית: ${q3}`, r, 3))
+  }
   // digit riddles (odd, units greater by d)
   ;[[2, 5], [2, 3], [4, 1], [1, 2], [3, 4], [5, 2], [1, 6], [3, 2]].forEach(([tens, d], k) => {
     const num = tens * 10 + tens + d
     if ((tens + d) % 2 === 0) return
     const q = `אני מספר אי־זוגי בן 2 ספרות. סכום הספרות שלי הוא ${tens + tens + d}. ספרת האחדות שלי גדולה ב־${d} מספרת העשרות. מי אני?`
-    items.push(pack(`wd${k}`, 'word', `<div class="g-sent">${q}</div>`, String(num), nums(num, [(tens + d) * 10 + tens, num + 10, num - 2]), `חידת ספרות: ${q}`, r))
+    items.push(pack(`wd${k}`, 'word', `<div class="g-sent">${q}</div>`, String(num), nums(num, [(tens + d) * 10 + tens, num + 10, num - 2]), `חידת ספרות: ${q}`, r, 3))
   })
   return items
 }
@@ -271,7 +311,8 @@ function buildNumShapes(): GItem[] {
   ]
   const items: GItem[] = []
   for (let i = 0; i < 36; i++) {
-    const [, f] = rules[i % rules.length]
+    const [rname, f] = rules[i % rules.length]
+    const nd: 1 | 2 | 3 = rname === 'sum' ? 1 : rname === 'prod' || rname === 'bcminusa' ? 2 : 3
     const triples: number[][] = []
     while (triples.length < 3) {
       const tr = [ri(1, 6), ri(1, 6), ri(1, 6)]
@@ -281,7 +322,7 @@ function buildNumShapes(): GItem[] {
     const [a, b, c] = triples[2]
     const cands = [a + b + c, a * b * c, a * b + c, ans + 1, ans - 2, ans + 3]
     const stem = `<div class="g-row" dir="ltr">${triSvg(triples[0], f(triples[0][0], triples[0][1], triples[0][2]))}${triSvg(triples[1], f(triples[1][0], triples[1][1], triples[1][2]))}${triSvg(triples[2], '?')}</div>`
-    items.push(pack(`ns${i}`, 'numshape', stem, String(ans), nums(ans, cands), `מספר חסר במשולשים (תרגיל ${i + 1})`, r))
+    items.push(pack(`ns${i}`, 'numshape', stem, String(ans), nums(ans, cands), `מספר חסר במשולשים (תרגיל ${i + 1})`, r, nd))
   }
   // circles: two numbers on top, one below (official style)
   const circ = (a: number | string, b: number | string, c: number | string) =>
@@ -293,7 +334,7 @@ function buildNumShapes(): GItem[] {
     const ans = f(tr[2][0], tr[2][1])
     const [a, b] = tr[2]
     const stem = `<div class="g-row" dir="ltr">${circ(tr[0][0], tr[0][1], f(tr[0][0], tr[0][1]))}${circ(tr[1][0], tr[1][1], f(tr[1][0], tr[1][1]))}${circ(a, b, '?')}</div>`
-    items.push(pack(`nc${i}`, 'numshape', stem, String(ans), nums(ans, [a + b, a * b, a + b + 1, ans + 2]), `מספר חסר בעיגולים (תרגיל ${i + 1})`, r))
+    items.push(pack(`nc${i}`, 'numshape', stem, String(ans), nums(ans, [a + b, a * b, a + b + 1, ans + 2]), `מספר חסר בעיגולים (תרגיל ${i + 1})`, r, ([1, 2, 2, 3, 3, 3] as const)[i % 6]))
   }
   // arrow chains: left <- [center] -> right, same multipliers in both rows
   for (let i = 0; i < 12; i++) {
@@ -303,7 +344,7 @@ function buildNumShapes(): GItem[] {
       `<div class="g-chain" dir="ltr"><span class="g-node">${l}</span><span>⟵</span><span class="g-box">${c}</span><span>⟶</span><span class="g-node">${rr}</span></div>`
     const ans = c2 * m1
     const stem = `<div>${row(c1, c1 * m1, c1 * m2)}${row(c2, '?', c2 * m2)}</div>`
-    items.push(pack(`na${i}`, 'numshape', stem, String(ans), nums(ans, [c2 * m2, c2 + m1, ans * 2, ans + c2]), `שרשרת חצים עם מספר חסר (תרגיל ${i + 1})`, r))
+    items.push(pack(`na${i}`, 'numshape', stem, String(ans), nums(ans, [c2 * m2, c2 + m1, ans * 2, ans + c2]), `שרשרת חצים עם מספר חסר (תרגיל ${i + 1})`, r, 3))
   }
   return items
 }
@@ -343,7 +384,7 @@ function buildFigural(): GItem[] {
       const seq = [0, 1, 2, 3].map((k) => shapeSvg(4, { rot: start + step * k, fill: COLORS[i % 4] }))
       const right = shapeSvg(4, { rot: start + step * 4, fill: COLORS[i % 4] })
       const wrongs = [step * 4 + 180, step * 3, step * 4 + 90].map((d) => shapeSvg(4, { rot: start + (d % 360 === (step * 4) % 360 ? d + 45 : d), fill: COLORS[i % 4] }))
-      items.push(pack(`fg${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, right, wrongs, `סדרת חצים מסתובבים (תרגיל ${i + 1})`, r))
+      items.push(pack(`fg${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, right, wrongs, `סדרת חצים מסתובבים (תרגיל ${i + 1})`, r, step === 45 ? 3 : 2))
     } else if (kind === 1) {
       // growing dots
       const sh = ri(0, 3), a = ri(1, 2), d = ri(1, 2)
@@ -351,7 +392,7 @@ function buildFigural(): GItem[] {
       const n = a + d * 3
       const right = shapeSvg(sh, { dots: n, size: 16 })
       const wrongs = [shapeSvg(sh, { dots: n - 1, size: 16 }), shapeSvg(sh, { dots: n + 1, size: 16 }), shapeSvg((sh + 1) % 4, { dots: n, size: 16 })]
-      items.push(pack(`fg${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, right, wrongs, `סדרת צורות עם נקודות (תרגיל ${i + 1})`, r))
+      items.push(pack(`fg${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, right, wrongs, `סדרת צורות עם נקודות (תרגיל ${i + 1})`, r, 1))
     } else if (kind === 2) {
       // size + shape cycle: small, medium, big then next shape
       const s1 = ri(0, 3), s2 = (s1 + 1 + ri(0, 2)) % 4
@@ -359,7 +400,7 @@ function buildFigural(): GItem[] {
       const seq = [shapeSvg(s1, { size: sizes[0] }), shapeSvg(s1, { size: sizes[1] }), shapeSvg(s1, { size: sizes[2] }), shapeSvg(s2, { size: sizes[0] })]
       const right = shapeSvg(s2, { size: sizes[1] })
       const wrongs = [shapeSvg(s2, { size: sizes[2] }), shapeSvg(s1, { size: sizes[1] }), shapeSvg(s2, { size: sizes[0] })]
-      items.push(pack(`fg${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, right, wrongs, `סדרת צורות שגדלות (תרגיל ${i + 1})`, r))
+      void right; void wrongs; void seq // dropped: easier than official level
     } else {
       // 3x3 matrix: rows = shape, cols = color
       const shapes = shuffleWith([0, 1, 2, 3], r).slice(0, 3)
@@ -370,7 +411,7 @@ function buildFigural(): GItem[] {
           grid += row === 2 && col === 2 ? Q_BOX : shapeSvg(shapes[row], { fill: cols[col], size: 18 })
       const right = shapeSvg(shapes[2], { fill: cols[2], size: 18 })
       const wrongs = [shapeSvg(shapes[2], { fill: cols[0], size: 18 }), shapeSvg(shapes[1], { fill: cols[2], size: 18 }), shapeSvg(shapes[0], { fill: cols[1], size: 18 })]
-      items.push(pack(`fg${i}`, 'figural', `<div class="g-matrix" dir="ltr">${grid}</div>`, right, wrongs, `טבלת צורות 3×3 (תרגיל ${i + 1})`, r))
+      items.push(pack(`fg${i}`, 'figural', `<div class="g-matrix" dir="ltr">${grid}</div>`, right, wrongs, `טבלת צורות 3×3 (תרגיל ${i + 1})`, r, 2))
     }
   }
   // polygon sides +1 (official sample type A)
@@ -387,7 +428,7 @@ function buildFigural(): GItem[] {
     const seq = [0, 1, 2, 3].map((k) => poly(start + step * k, COLORS[i % 4] + '33'))
     const n = start + step * 4
     const fill = COLORS[i % 4] + '33'
-    items.push(pack(`fp${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, poly(n, fill), [poly(n - 1, fill), poly(n + 1, fill), poly(2, fill)], `סדרת מצולעים (תרגיל ${i + 1})`, r))
+    items.push(pack(`fp${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, poly(n, fill), [poly(n - 1, fill), poly(n + 1, fill), poly(2, fill)], `סדרת מצולעים (תרגיל ${i + 1})`, r, step === 1 ? 1 : 2))
   }
   // 3 rows, rule restarts every row (official sample type B)
   const dotsBox = (n: number) => {
@@ -401,32 +442,81 @@ function buildFigural(): GItem[] {
     let grid = ''
     starts.forEach((st, row) => [0, 1, 2].forEach((col) => (grid += row === 2 && col === 2 ? Q_BOX : dotsBox(st + step * col))))
     const n = starts[2] + step * 2
-    items.push(pack(`fr${i}`, 'figural', `<div class="g-matrix" dir="ltr">${grid}</div>`, dotsBox(n), [dotsBox(n - 1), dotsBox(n + 1), dotsBox(starts[2])], `שלוש שורות של נקודות (תרגיל ${i + 1})`, r))
+    items.push(pack(`fr${i}`, 'figural', `<div class="g-matrix" dir="ltr">${grid}</div>`, dotsBox(n), [dotsBox(n - 1), dotsBox(n + 1), dotsBox(starts[2])], `שלוש שורות של נקודות (תרגיל ${i + 1})`, r, step === 1 ? 1 : 2))
   }
-  // carpet with a missing piece (official sample type C)
-  for (let i = 0; i < 10; i++) {
-    const c1 = COLORS[i % 4], c2 = COLORS[(i + 1) % 4]
-    const kind = i % 3
-    const cell = (row: number, col: number, x: number, y: number, sz: number, swap = false) => {
-      const A = swap ? c2 : c1, B = swap ? c1 : c2
-      if (kind === 0) return (row + col) % 2 ? `<rect x="${x}" y="${y}" width="${sz}" height="${sz}" fill="${A}"/>` : `<rect x="${x}" y="${y}" width="${sz}" height="${sz}" fill="#fff"/><circle cx="${x + sz / 2}" cy="${y + sz / 2}" r="${sz / 3}" fill="${B}"/>`
-      if (kind === 1) return `<rect x="${x}" y="${y}" width="${sz}" height="${sz}" fill="#fff"/>` + (col % 2 ? `<polygon points="${x},${y + sz} ${x + sz / 2},${y} ${x + sz},${y + sz}" fill="${row % 2 ? A : B}"/>` : `<polygon points="${x},${y} ${x + sz},${y} ${x + sz / 2},${y + sz}" fill="${row % 2 ? B : A}"/>`)
-      return `<rect x="${x}" y="${y}" width="${sz}" height="${sz}" fill="${row % 3 === 0 ? A : '#fff'}"/>` + (row % 3 !== 0 ? `<polygon points="${x + sz / 2},${y + 3} ${x + sz - 3},${y + sz / 2} ${x + sz / 2},${y + sz - 3} ${x + 3},${y + sz / 2}" fill="${(col + row) % 2 ? B : A}"/>` : '')
+  // carpet with a missing piece (official sample type C): multi-band ornamental rugs
+  const PALS = [['#222', '#9a9a9a', '#e6e6e6'], ['#7a1f2b', '#d9a441', '#f4ead5'], ['#1f3b73', '#5aa9f7', '#eaf2fb'], ['#1e5b3a', '#9bc53d', '#eef5e0']]
+  const motif = (m: number, row: number, col: number, x: number, y: number, S: number, P: string[]) => {
+    const [D, M, L] = P
+    const h = S / 2
+    switch (m) {
+      case 0: // checker of diamonds
+        return `<rect x="${x}" y="${y}" width="${S}" height="${S}" fill="${(row + col) % 2 ? D : L}"/><polygon points="${x + h},${y + 2} ${x + S - 2},${y + h} ${x + h},${y + S - 2} ${x + 2},${y + h}" fill="${(row + col) % 2 ? M : D}"/>`
+      case 1: // zigzag triangles alternating direction
+        return `<rect x="${x}" y="${y}" width="${S}" height="${S}" fill="${L}"/>` + (col % 2 === row % 2 ? `<polygon points="${x},${y + S} ${x + h},${y} ${x + S},${y + S}" fill="${D}"/>` : `<polygon points="${x},${y} ${x + S},${y} ${x + h},${y + S}" fill="${M}"/>`)
+      case 2: // stripes band
+        return `<rect x="${x}" y="${y}" width="${S}" height="${S}" fill="${L}"/>` + [0, 1, 2, 3].map((k) => `<rect x="${x}" y="${y + (k * S) / 4}" width="${S}" height="${S / 8}" fill="${(k + col) % 2 ? D : M}"/>`).join('')
+      case 3: // quarter circles (eye)
+        return `<rect x="${x}" y="${y}" width="${S}" height="${S}" fill="${M}"/><path d="M${x + ((col % 2) ? S : 0)} ${y + ((row % 2) ? S : 0)} m0 0 A${S} ${S} 0 0 ${((col + row) % 2) ? 1 : 0} ${x + ((col % 2) ? 0 : S)} ${y + ((row % 2) ? S : 0)}" fill="${D}" stroke="${D}"/>`
+      default: // half-diagonal split with dot
+        return `<polygon points="${x},${y} ${x + S},${y} ${(col + row) % 2 ? `${x + S},${y + S}` : `${x},${y + S}`}" fill="${D}"/><polygon points="${(col + row) % 2 ? `${x},${y} ${x},${y + S} ${x + S},${y + S}` : `${x + S},${y} ${x + S},${y + S} ${x},${y + S}`}" fill="${L}"/><circle cx="${x + h}" cy="${y + h}" r="${S / 7}" fill="${M}"/>`
     }
-    const R = 6, C = 8, S = 24
-    const mr = 1 + ri(0, 2), mc = 2 + ri(0, 3)
-    let svg = `<svg viewBox="0 0 ${C * S} ${R * S}" width="${C * S}" height="${R * S}" class="g-svg carpet">`
-    for (let row = 0; row < R; row++) for (let col = 0; col < C; col++) svg += cell(row, col, col * S, row * S, S)
-    svg += `<rect x="${mc * S}" y="${mr * S}" width="${2 * S}" height="${2 * S}" fill="#fff" stroke="#e5533d" stroke-width="2"/><text x="${mc * S + S}" y="${mr * S + S + 9}" text-anchor="middle" font-size="26" font-weight="700" fill="#e5533d">?</text></svg>`
-    const piece = (dr: number, dc: number, swap = false) => {
-      let p = `<svg viewBox="0 0 ${2 * S} ${2 * S}" width="${2 * S + 16}" height="${2 * S + 16}" class="g-svg">`
-      for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) p += cell(mr + a + dr, mc + b + dc, b * S, a * S, S, swap)
-      return p + `<rect x="0" y="0" width="${2 * S}" height="${2 * S}" fill="none" stroke="#223" stroke-width="1.5"/></svg>`
+  }
+  for (let i = 0; i < 26; i++) {
+    const P = PALS[i % PALS.length]
+    const bands = [i % 5, (i + 2) % 5, (i + 1) % 5, (i + 4) % 5].slice(0, 2 + (i % 3)) // 2-4 different bands
+    const rowsPerBand = i % 2 ? 2 : 3
+    const R = Math.min(8, bands.length * rowsPerBand), C = 9, S = 22
+    const cellAt = (row: number, col: number, x: number, y: number, swap = false) => {
+      const band = bands[Math.floor(((row % R) + R) % R / rowsPerBand) % bands.length]
+      const pal = swap ? [P[1], P[0], P[2]] : P
+      return motif(band, row, col, x, y, S, pal)
+    }
+    const pr = 2 // piece 2x2 cells
+    const mr = ri(0, R - pr), mc = ri(1, C - pr - 1)
+    let svg = `<svg viewBox="0 0 ${C * S} ${R * S}" width="${C * S}" height="${R * S}" class="g-svg carpet"><rect width="${C * S}" height="${R * S}" fill="${P[2]}"/>`
+    for (let row = 0; row < R; row++) for (let col = 0; col < C; col++) svg += cellAt(row, col, col * S, row * S)
+    svg += `<rect x="${mc * S}" y="${mr * S}" width="${pr * S}" height="${pr * S}" fill="#fff" stroke="#222" stroke-width="1.5"/><text x="${mc * S + S}" y="${mr * S + S + 8}" text-anchor="middle" font-size="22" font-weight="700" fill="#e5533d">?</text></svg>`
+    const piece = (dr: number, dc: number, swap = false, mirror = false) => {
+      let p = `<svg viewBox="0 0 ${pr * S} ${pr * S}" width="${pr * S + 20}" height="${pr * S + 20}" class="g-svg"><g${mirror ? ` transform="translate(${pr * S} 0) scale(-1 1)"` : ''}>`
+      for (let a = 0; a < pr; a++) for (let b = 0; b < pr; b++) p += cellAt(mr + a + dr, mc + b + dc, b * S, a * S, swap)
+      return p + `</g><rect x="0" y="0" width="${pr * S}" height="${pr * S}" fill="none" stroke="#222" stroke-width="1"/></svg>`
     }
     const right = piece(0, 0)
-    const cands = [piece(0, 1), piece(1, 0), piece(0, 0, true), piece(1, 1), piece(0, -1)].filter((x) => x !== right)
+    const cands = [piece(0, 1), piece(0, 0, false, true), piece(0, 0, true), piece(1, 0), piece(0, -1), piece(-1, 0), piece(1, 1)].filter((x) => x !== right)
     const uniq = [...new Set(cands)].slice(0, 3)
-    if (uniq.length === 3) items.push(pack(`fc${i}`, 'figural', `<div class="g-row">${svg}</div>`, right, uniq, `שטיח שחסרה בו חתיכה (תרגיל ${i + 1})`, r))
+    const d: 1 | 2 | 3 = bands.length >= 4 ? 3 : bands.length === 3 ? 3 : 2
+    if (uniq.length === 3) items.push(pack(`fc${i}`, 'figural', `<div class="g-row">${svg}</div>`, right, uniq, `שטיח שחסרה בו חתיכה (תרגיל ${i + 1})`, r, d))
+  }
+  // harder rows: two rules at once (arrow turns AND dots grow)
+  for (let i = 0; i < 10; i++) {
+    const step = [45, 90, 135][i % 3], start = ri(0, 7) * 45, d0 = ri(0, 1), dd = 1 + (i % 2)
+    const fill = COLORS[i % 4]
+    const seq = [0, 1, 2, 3].map((k) => shapeSvg(4, { rot: start + step * k, fill, dots: d0 + dd * k, size: 13 }))
+    const rot4 = start + step * 4, n = d0 + dd * 4
+    const right = shapeSvg(4, { rot: rot4, fill, dots: n, size: 13 })
+    const wrongs = [shapeSvg(4, { rot: rot4, fill, dots: n - 1, size: 13 }), shapeSvg(4, { rot: rot4 + 90, fill, dots: n, size: 13 }), shapeSvg(4, { rot: rot4 + 180, fill, dots: n + 1, size: 13 })]
+    items.push(pack(`fx${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, right, wrongs, `סדרה עם שני כללים: כיוון ונקודות (תרגיל ${i + 1})`, r, 3))
+  }
+  // harder 3-row (like official q3): frame type per row; inner small square moves corner per column
+  const frameBox = (frame: number, pos: number, inner: number) => {
+    const corners = [[14, 14], [50, 14], [50, 50], [14, 50]]
+    const [cx, cy] = corners[pos % 4]
+    const fr = frame === 0 ? `<line x1="4" y1="4" x2="60" y2="60" stroke="#222" stroke-width="2"/>` : frame === 1 ? `<line x1="60" y1="4" x2="4" y2="60" stroke="#222" stroke-width="2"/>` : `<line x1="32" y1="4" x2="32" y2="60" stroke="#222" stroke-width="2"/>`
+    const inn = inner === 0 ? `<rect x="${cx - 6}" y="${cy - 6}" width="12" height="12" fill="#fff" stroke="#222" stroke-width="2"/>` : `<circle cx="${cx}" cy="${cy}" r="6" fill="#222"/>`
+    return `<svg viewBox="0 0 64 64" width="64" height="64" class="g-svg"><rect x="3" y="3" width="58" height="58" fill="#fff" stroke="#222" stroke-width="2"/><rect x="18" y="18" width="28" height="28" fill="none" stroke="#222" stroke-width="2"/>${fr}${inn}</svg>`
+  }
+  for (let i = 0; i < 10; i++) {
+    const frames = shuffleWith([0, 1, 2], r)
+    const inner = i % 2
+    const p0 = [ri(0, 3), ri(0, 3), ri(0, 3)]
+    const mv = i % 3 === 2 ? 2 : 1
+    let grid = ''
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) grid += row === 2 && col === 2 ? Q_BOX : frameBox(frames[row], p0[row] + mv * col, inner)
+    const pos = p0[2] + mv * 2
+    const right = frameBox(frames[2], pos, inner)
+    const wrongs = [frameBox(frames[2], pos + 1, inner), frameBox(frames[1], pos, inner), frameBox(frames[2], pos, 1 - inner)]
+    items.push(pack(`fy${i}`, 'figural', `<div class="g-matrix" dir="ltr">${grid}</div>`, right, wrongs, `שלוש שורות: מסגרת ומיקום (תרגיל ${i + 1})`, r, 3))
   }
   return items
 }
@@ -477,4 +567,16 @@ export const GIFTED_TIPS: Record<GType, string> = {
   word: 'לקרוא את הבעיה פעמיים, לכתוב את השלבים (קודם… ואז…), ולבדוק אם התשובה הגיונית.',
   numshape: 'למצוא כלל בצורה הראשונה ולבדוק שהוא עובד גם בשנייה, לפני שמחשבים את החסר.',
   figural: 'לשאול: מה משתנה מצורה לצורה (כיוון, גודל, מספר, צבע) ומה נשאר קבוע. לבדוק בטבלה גם את השורה וגם את העמודה.',
+}
+
+/** Exam chapter: official-like easy→hard ordering (3 easy, 4 medium, 3 hard when available). */
+export function pickExamChapter(type: GType, n = 10): GItem[] {
+  const pool = GIFTED_BANK.filter((it) => it.type === type)
+  const by = (d: number) => pool.filter((it) => it.diff === d).sort(() => Math.random() - 0.5)
+  const want: [number, number][] = [[1, 3], [2, 4], [3, 3]]
+  const out: GItem[] = []
+  for (const [d, k] of want) out.push(...by(d).slice(0, k))
+  const rest = pool.filter((it) => !out.includes(it)).sort(() => Math.random() - 0.5)
+  while (out.length < n && rest.length) out.push(rest.pop()!)
+  return out.sort((a, b) => a.diff - b.diff)
 }

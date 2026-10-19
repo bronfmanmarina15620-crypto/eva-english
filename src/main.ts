@@ -25,7 +25,7 @@ import {
   type ModuleOpts,
 } from './session'
 import { renderQuestion, type AnswerResult } from './questions'
-import { GTYPE_META, GTYPES, GIFTED_TIPS, pickGiftedItems, type GType, type GItem, type GStats } from './gifted'
+import { GTYPE_META, GTYPES, GIFTED_TIPS, pickGiftedItems, pickExamChapter, type GType, type GItem, type GStats } from './gifted'
 import { CVC_WORDS, HEART_WORDS, PARENT_TIPS, PHONICS_TIPS, lettersAZ, shuffle } from './content'
 
 warmVoices()
@@ -313,9 +313,8 @@ let examQ = 0
 let examPhase: 'intro' | 'chapter-intro' | 'q' | 'results' = 'intro'
 
 function startExam(): void {
-  const { stats } = giftedStats()
   exam = EXAM_ORDER.map((t) => {
-    const items = pickGiftedItems(t, stats, {}, EXAM_PER_CHAPTER)
+    const items = pickExamChapter(t, EXAM_PER_CHAPTER)
     return { type: t, items, answers: items.map(() => null), start: 0 }
   })
   examCh = 0
