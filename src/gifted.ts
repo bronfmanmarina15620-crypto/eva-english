@@ -174,6 +174,22 @@ const SENTENCES: [string, string, string[]][] = [
 ]
 
 // ---------- builders ----------
+// fill-the-word format: A : B / C : ___
+const AN_FILL: [string, string, string, string[], 1 | 2 | 3][] = [
+  ['עמוד', 'ספר', 'אצבע', ['טבעת', 'כפפה', 'ציפורן'], 2],
+  ['זאב', 'להקה', 'פרה', ['חלב', 'רפת', 'עגל'], 2],
+  ['ענף', 'עץ', 'גלגל', ['כביש', 'נהג', 'הגה'], 2],
+  ['כבשה', 'צמר', 'תרנגולת', ['תרנגול', 'לול', 'גרגר'], 2],
+  ['מעיל', 'חורף', 'כפכפים', ['חול', 'ים', 'רגליים'], 2],
+  ['היסס', 'נחישות', 'פחד', ['חושך', 'בכי', 'דאגה'], 3],
+  ['נמלה', 'זעירה', 'פיל', ['אפור', 'חדק', 'ג׳ונגל'], 3],
+  ['מכחול', 'צייר', 'מצלמה', ['תמונה', 'עדשה', 'אלבום'], 2],
+  ['לחש', 'שקט', 'רעם', ['ברק', 'ענן', 'גשם'], 3],
+  ['עגל', 'פרה', 'סייח', ['אורווה', 'פרסה', 'רעמה'], 2],
+  ['שיר', 'משורר', 'פֶּסֶל', ['אבן', 'מוזיאון', 'כן'], 3],
+  ['דקה', 'שעה', 'יום', ['לילה', 'שמש', 'חודש'], 3],
+]
+const AN_FILL_RIGHT = ['גוף', 'עדר', 'מכונית', 'ביצה', 'קיץ', 'אומץ', 'ענק', 'צלם', 'רעש', 'סוסה', 'פַּסָּל', 'שבוע']
 const AN_EASY = new Set([0, 1, 2, 3, 6, 10, 16, 20, 22, 27])
 function buildAnalogies(): GItem[] {
   const r = rng(11)
@@ -196,6 +212,12 @@ function sentDiff(s: string, right: string): 1 | 2 | 3 {
   if (blanks >= 3 || /אף על פי|למרות|ובכל זאת|שלשום|אתמול|במקום|לא רק/.test(s + right)) return 3
   if (/גם \/ וגם|קודם|זורחת|הם פירות|לובשים/.test(s + right)) return 1
   return 2
+}
+function buildAnalogyFill(): GItem[] {
+  const r = rng(12)
+  return AN_FILL.map(([a, b, c, wr, d], i) =>
+    pack(`af${i}`, 'analogy', `<div class="g-big">${a} : ${b}</div><div class="g-big">${c} : ______</div>`, AN_FILL_RIGHT[i], wr, `השלמת קשר: ${a} : ${b} / ${c} : ?`, r, d),
+  )
 }
 function buildSentences(): GItem[] {
   const r = rng(22)
@@ -298,6 +320,18 @@ function buildWordProblems(): GItem[] {
     const q3 = `היום אבא בן ${dad} ונועם בן ${kid}. בעוד ${yrs} שנים, בן כמה יהיה אבא יותר מנועם?`
     items.push(pack(`wh${i}c`, 'word', `<div class="g-sent">${q3}</div>`, String(dad - kid), nums(dad - kid, [dad - kid + yrs, dad - kid - yrs, dad + yrs - kid + yrs]), `בעיה מילולית: ${q3}`, r, 3))
   }
+  // logic / trap problems (relations chains, slipping climber)
+  ;[[7, 3, 1], [9, 4, 2], [10, 3, 1], [12, 5, 2], [8, 4, 1], [11, 4, 1]].forEach(([depth, up, down], k) => {
+    let h = 0, n = 0
+    while (true) { n++; h += up; if (h >= depth) break; h -= down }
+    const q = `חילזון נמצא בתחתית בור בעומק ${depth} מטרים. בכל יום הוא מטפס ${up} מטרים, ובלילה, אם עדיין לא יצא, הוא מחליק ${down} מטרים למטה. ביום הכמה ייצא מהבור?`
+    items.push(pack(`wt${k}`, 'word', `<div class="g-sent">${q}</div>`, String(n), nums(n, [Math.ceil(depth / (up - down)), n + 1, Math.ceil(depth / up)]), `בעיית היגיון: ${q}`, r, 3))
+  })
+  ;[[12, 5, 3], [15, 4, 2], [10, 6, 1], [14, 3, 4]].forEach(([c, a, b], k) => {
+    const mid = c - b, top = mid + a
+    const q = `לנועה שלושה אחים: גיל, רון ואורי. גיל גדול מרון ב־${a} שנים, ורון צעיר מאורי ב־${b} שנים. אורי בן ${c}. בן כמה גיל?`
+    items.push(pack(`wr${k}`, 'word', `<div class="g-sent">${q}</div>`, String(top), nums(top, [c + a + b, c - a - b, c + a - b + 2 * b]), `בעיית היגיון: ${q}`, r, 3))
+  })
   // digit riddles (odd, units greater by d)
   ;[[2, 5], [2, 3], [4, 1], [1, 2], [3, 4], [5, 2], [1, 6], [3, 2]].forEach(([tens, d], k) => {
     const num = tens * 10 + tens + d
@@ -505,6 +539,24 @@ function buildFigural(): GItem[] {
     const d: 1 | 2 | 3 = bands.length >= 4 ? 3 : bands.length === 3 ? 3 : 2
     if (uniq.length === 3) items.push(pack(`fc${i}`, 'figural', `<div class="g-row">${svg}</div>`, right, uniq, `שטיח שחסרה בו חתיכה (תרגיל ${i + 1})`, r, d))
   }
+  // three rules at once: filled quarters grow clockwise, outer dot alternates up/down, center alternates light/dark
+  const qc = (filled: number, dotUp: boolean, darkCenter: boolean, col: string) => {
+    const seg = (k: number) => {
+      const a0 = -90 + 90 * k, a1 = a0 + 90
+      const p = (a: number) => `${(32 + 22 * Math.cos((a * Math.PI) / 180)).toFixed(1)} ${(32 + 22 * Math.sin((a * Math.PI) / 180)).toFixed(1)}`
+      return `<path d="M32 32 L${p(a0)} A22 22 0 0 1 ${p(a1)} Z" fill="${k < filled ? col : '#fff'}" stroke="#222" stroke-width="1.5"/>`
+    }
+    return `<svg viewBox="0 0 64 64" width="64" height="64" class="g-svg">${[0, 1, 2, 3].map(seg).join('')}<circle cx="32" cy="32" r="6" fill="${darkCenter ? '#222' : '#fff'}" stroke="#222" stroke-width="1.5"/><circle cx="58" cy="${dotUp ? 6 : 58}" r="4" fill="#222"/></svg>`
+  }
+  for (let i = 0; i < 10; i++) {
+    const col = COLORS[i % 4], up0 = i % 2 === 0, dk0 = i % 3 === 0
+    const start = i % 2 // 0 or 1 quarters at start
+    const seq = [0, 1, 2].map((k) => qc(start + k, k % 2 === 0 ? up0 : !up0, k % 2 === 0 ? dk0 : !dk0, col))
+    const f = start + 3, up = !up0, dk = !dk0 // step 3 is odd
+    const right = qc(Math.min(4, f), up, dk, col)
+    const wrongs = [qc(Math.min(4, f) - 1, up, dk, col), qc(Math.min(4, f), !up, dk, col), qc(Math.min(4, f), up, !dk, col)]
+    items.push(pack(`fq${i}`, 'figural', `<div class="g-row" dir="ltr">${seq.join('')}${Q_BOX}</div>`, right, wrongs, `סדרה עם שלושה כללים (תרגיל ${i + 1})`, r, 3))
+  }
   // harder rows: two rules at once (arrow turns AND dots grow)
   for (let i = 0; i < 10; i++) {
     const step = [45, 90, 135][i % 3], start = ri(0, 7) * 45, d0 = ri(0, 1), dd = 1 + (i % 2)
@@ -540,6 +592,7 @@ function buildFigural(): GItem[] {
 
 export const GIFTED_BANK: GItem[] = [
   ...buildAnalogies(),
+  ...buildAnalogyFill(),
   ...buildSentences(),
   ...buildWordProblems(),
   ...buildNumShapes(),
