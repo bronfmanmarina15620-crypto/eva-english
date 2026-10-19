@@ -41,7 +41,7 @@ document.addEventListener(
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
-type Screen = 'gate' | 'home' | 'gifted-home' | 'practice' | 'end' | 'pin' | 'parent' | 'cvc-pick'
+type Screen = 'gate' | 'home' | 'gifted-home' | 'exam' | 'practice' | 'end' | 'pin' | 'parent' | 'cvc-pick'
 
 let data = load()
 let screen: Screen = 'gate'
@@ -108,6 +108,7 @@ function render(): void {
   data = load()
   if (screen === 'gate') renderGate()
   else if (screen === 'gifted-home') renderGiftedHome()
+  else if (screen === 'exam') renderExam()
   else if (screen === 'home') renderHome()
   else if (screen === 'practice') renderPractice()
   else if (screen === 'end') renderEnd()
@@ -262,6 +263,10 @@ function renderGiftedHome(): void {
   shell(`
     <h2>הכנה למבחן המחוננים 🧠</h2>
     <p class="lead">תרגול קצר, עד 20 דקות. לא ממהרים, חושבים ובודקים.</p>
+    <button class="primary exam-btn" id="gExam" type="button">📝 מבחן דמה כמו במבחן האמיתי</button>
+    <p class="note">5 פרקים לפי הסדר של מבחן ההדגמה הרשמי, 10 שאלות בכל פרק, שעון לכל פרק. תשובה אחת לכל שאלה.</p>
+    <a class="ghost pdf-link" href="${OFFICIAL_PDF}" target="_blank" rel="noopener">📄 מבחן ההדגמה הרשמי של משרד החינוך (PDF)</a>
+    <h3>תרגול</h3>
     <button class="primary" id="gMixed" type="button">🎲 תרגול מעורב</button>
     <div class="mod-grid" id="gmods"></div>
     <button class="ghost" id="btnGate">→ חזרה לעולם של אווה</button>
@@ -277,7 +282,186 @@ function renderGiftedHome(): void {
     g.appendChild(b)
   })
   app.querySelector('#gMixed')!.addEventListener('click', () => startGifted('mixed'))
+  app.querySelector('#gExam')!.addEventListener('click', startExam)
   app.querySelector('#btnGate')!.addEventListener('click', () => { screen = 'gate'; render() })
+}
+
+// ---------- Exam simulation (official demo structure) ----------
+const OFFICIAL_PDF = 'https://meyda.education.gov.il/files/gifted/test-shlav2-example.pdf'
+const EXAM_ORDER: GType[] = ['analogy', 'sentence', 'word', 'numshape', 'figural']
+const EXAM_PER_CHAPTER = 10
+const EXAM_CHAPTER_MS = 14 * 60 * 1000 // 70 min total (official) / 5 chapters; per-chapter split not published
+const EXAM_TITLES: Record<GType, string> = {
+  analogy: 'חלק 1: מה הקשר בין המילים?',
+  sentence: 'חלק 2: מהן המילים החסרות במשפט?',
+  word: 'חלק 3: מה הפתרון לבעיה?',
+  numshape: 'חלק 4: מה המספר החסר בצורה?',
+  figural: 'חלק 5: מה הצורה הבאה?',
+}
+const EXAM_INSTR: Record<GType, string> = {
+  analogy: 'בכל שאלה בחלק זה מופיע זוג מילים מודגשות. עליכם לגלות מה הקשר בין זוג המילים המודגשות, ואז לבחור מבין האפשרויות את זוג המילים שהקשר ביניהן הוא הדומה ביותר לקשר שגיליתם. חשוב לשים לב גם לסדר בין המילים בכל זוג.',
+  sentence: 'בכל שאלה מופיע משפט שחסרה בו מילה אחת או כמה מילים, ובמקום המילים החסרות מופיעים קווים. מתחת למשפט יש 4 אפשרויות להשלמת החסר במשפט, ועליכם לבחור מביניהן את התשובה המתאימה ביותר.',
+  word: 'בחלק זה שאלות מילוליות. קראו כל שאלה בתשומת לב ובחרו את התשובה הנכונה מבין 4 אפשרויות התשובה.',
+  numshape: 'בשאלות בחלק זה מופיעים מספרים שמסודרים בתוך צורות. בכל צורה המספרים מסודרים לפי כלל מסוים. הכלל מתבסס על פעולות חשבון (חיבור, חיסור, כפל או חילוק, ולפעמים יותר מפעולה אחת) וגם על המקום של המספרים בצורה. גלו את הכלל, ובעזרתו מצאו איזה מספר צריך להופיע במקום סימן השאלה.',
+  figural: 'בחלק זה שאלות משלושה סוגים: צורות בשורה, צורות בשלוש שורות, והחתיכה החסרה בשטיח. בכל שאלה גלו את הכלל ובחרו את הצורה החסרה מבין 4 האפשרויות.',
+}
+const EXAM_GENERAL = 'במבחן חמישה חלקים. בכל השאלות עליכם לבחור את התשובה הנכונה מבין 4 אפשרויות. כדאי לענות על כל השאלות, ואם לא יודעים – לנחש. לכל חלק יש זמן משלו.'
+type ExamCh = { type: GType; items: GItem[]; answers: (number | null)[]; start: number }
+let exam: ExamCh[] = []
+let examCh = 0
+let examQ = 0
+let examPhase: 'intro' | 'chapter-intro' | 'q' | 'results' = 'intro'
+
+function startExam(): void {
+  const { stats } = giftedStats()
+  exam = EXAM_ORDER.map((t) => {
+    const items = pickGiftedItems(t, stats, {}, EXAM_PER_CHAPTER)
+    return { type: t, items, answers: items.map(() => null), start: 0 }
+  })
+  examCh = 0
+  examQ = 0
+  examPhase = 'intro'
+  area = 'gifted'
+  screen = 'exam'
+  render()
+}
+
+function examLeft(): number {
+  return Math.max(0, EXAM_CHAPTER_MS - (Date.now() - exam[examCh].start))
+}
+
+function examTick(): void {
+  stopTimer()
+  timerId = window.setInterval(() => {
+    const el = document.querySelector<HTMLElement>('#gtimer')
+    const left = examLeft()
+    if (el) el.textContent = `⏱ ${Math.floor(left / 60000)}:${String(Math.floor((left % 60000) / 1000)).padStart(2, '0')} לחלק הזה`
+    if (left === 0) {
+      stopTimer()
+      alert('הזמן של החלק הזה נגמר. עוברים לחלק הבא.')
+      nextChapter()
+    }
+  }, 1000)
+}
+
+function nextChapter(): void {
+  stopTimer()
+  examCh++
+  examQ = 0
+  if (examCh >= exam.length) finishExam()
+  else {
+    examPhase = 'chapter-intro'
+    render()
+  }
+}
+
+function finishExam(): void {
+  stopTimer()
+  examCh = exam.length - 1
+  let total = 0
+  let ok = 0
+  helpList = []
+  exam.forEach((ch) =>
+    ch.items.forEach((it, i) => {
+      const a = ch.answers[i]
+      const good = a === it.correct
+      total++
+      if (good) ok++
+      else helpList.push(it.plain)
+      logExercise(data, {
+        at: Date.now(), date: todayKey(), area: 'gifted', type: 'g:' + it.type, itemId: it.id,
+        answers: a == null ? [] : ['אבגד'[a]], attempts: a == null ? 0 : 1, ms: 0,
+        outcome: good ? 'first' : 'help', plain: it.plain,
+      })
+    }),
+  )
+  finishSession(data, 'gifted-exam', 'מחוננים · מבחן דמה', total, ok, ok)
+  data = load()
+  examPhase = 'results'
+  render()
+}
+
+function renderExam(): void {
+  if (examPhase === 'intro') {
+    shell(`
+      <h2>מבחן דמה 📝</h2>
+      <div class="panel exam-instr"><p>${EXAM_GENERAL}</p><p class="note">אורך המבחן הרשמי: 70 דקות. בדמה: 14 דקות לכל חלק (חלוקה שלנו – משרד החינוך לא פרסם זמן לכל חלק).</p></div>
+      <button class="primary" id="go">מתחילים</button>
+      <button class="ghost" id="back">חזרה</button>`)
+    app.querySelector('#go')!.addEventListener('click', () => { examPhase = 'chapter-intro'; render() })
+    app.querySelector('#back')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
+    return
+  }
+  if (examPhase === 'chapter-intro') {
+    const t = exam[examCh].type
+    shell(`
+      <h2>${EXAM_TITLES[t]}</h2>
+      <div class="panel exam-instr"><strong>הוראות</strong><p>${EXAM_INSTR[t]}</p><p class="note">${EXAM_PER_CHAPTER} שאלות · ${EXAM_CHAPTER_MS / 60000} דקות</p></div>
+      <button class="primary" id="go">התחילי את החלק</button>`)
+    app.querySelector('#go')!.addEventListener('click', () => {
+      exam[examCh].start = Date.now()
+      examPhase = 'q'
+      examTick()
+      render()
+    })
+    return
+  }
+  if (examPhase === 'q') {
+    const ch = exam[examCh]
+    shell(`
+      <div class="g-timer" id="gtimer">⏱ …</div>
+      <p class="note">${EXAM_TITLES[ch.type]} · שאלה ${examQ + 1} מתוך ${ch.items.length}</p>
+      <div id="qhost"></div>
+      <button class="ghost" id="skip">דלגי (אפשר לחזור בסוף החלק)</button>`,
+      `<button class="ghost" id="btnExit">✕</button>`)
+    const host = app.querySelector<HTMLElement>('#qhost')!
+    renderGiftedItem(ch.items[examQ], host, () => {})
+    host.querySelectorAll<HTMLButtonElement>('.g-opt').forEach((b, i) => {
+      if (ch.answers[examQ] === i) b.classList.add('chosen')
+      b.addEventListener('click', () => {
+        ch.answers[examQ] = i
+        advanceExam()
+      })
+    })
+    app.querySelector('#skip')!.addEventListener('click', advanceExam)
+    app.querySelector('#btnExit')!.addEventListener('click', () => {
+      if (confirm('לסיים את מבחן הדמה עכשיו? שאלות שלא נענו ייחשבו כטעות.')) finishExam()
+    })
+    return
+  }
+  // results per chapter (no answers revealed)
+  const rows = exam
+    .map((ch) => {
+      const ok = ch.items.filter((it, i) => ch.answers[i] === it.correct).length
+      const skipped = ch.answers.filter((a) => a == null).length
+      return `<div class="kv"><span>${EXAM_TITLES[ch.type]}</span> <b dir="ltr">${ok}/${ch.items.length}</b>${skipped ? ` <small>(${skipped} בלי תשובה)</small>` : ''}</div>`
+    })
+    .join('')
+  const help = helpList.length
+    ? `<div class="panel help-list"><strong>${HELP_MSG}:</strong><ol>${helpList.map((h) => `<li>${h}</li>`).join('')}</ol></div>`
+    : ''
+  shell(`
+    <div class="celebrate">
+      <h2>סיימת את מבחן הדמה! 🌟</h2>
+      <div class="panel">${rows}</div>
+      ${help}
+      <button class="primary" id="home">חזרה</button>
+    </div>`)
+  app.querySelector('#home')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
+}
+
+function advanceExam(): void {
+  const ch = exam[examCh]
+  // move to next unanswered question in this chapter; finish chapter when all answered
+  for (let k = 1; k <= ch.items.length; k++) {
+    const j = (examQ + k) % ch.items.length
+    if (ch.answers[j] == null) {
+      examQ = j
+      render()
+      return
+    }
+  }
+  nextChapter()
 }
 
 function resetSessionState(): void {

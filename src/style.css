@@ -419,3 +419,11 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .help-list{text-align:right;background:#fff7e6}
 .help-list ol{margin:6px 0 0;padding-inline-start:20px}
 .rank-row{text-align:right;line-height:1.6}
+.exam-btn{font-size:1.2rem;padding:16px;background:#7c3aed}
+.pdf-link{display:block;text-align:center;margin:8px 0;text-decoration:none}
+.exam-instr{text-align:right;line-height:1.7}
+.g-opt.chosen{outline:3px solid #7c3aed}
+.g-chain{display:flex;gap:6px;align-items:center;justify-content:center;margin:6px 0;font-size:1.2rem}
+.g-node{display:inline-flex;min-width:44px;height:44px;border:2px solid #223;border-radius:50%;align-items:center;justify-content:center;font-weight:700}
+.g-box{display:inline-flex;min-width:44px;height:44px;border:3px solid #223;align-items:center;justify-content:center;font-weight:700}
+.carpet{max-width:100%;height:auto}
