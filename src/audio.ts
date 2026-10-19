@@ -53,7 +53,7 @@ const SOUND_KEYS = new Set([
   'kw',
 ])
 
-const AUDIO_CACHE = '20260913n' // bump when letter-name / phoneme MP3s change
+const AUDIO_CACHE = '20261019a' // bump when letter-name / phoneme MP3s change
 
 function audioUrl(rel: string): string {
   return `${BASE}audio/${rel}?v=${AUDIO_CACHE}`

@@ -38,6 +38,25 @@ export type AppData = {
   lastPracticeDate: string | null
   confusions: { pair: string; count: number }[]
   showAdvanced: boolean
+  log: ExerciseLog[]
+}
+
+export type ExerciseLog = {
+  at: number
+  date: string
+  area: 'english' | 'gifted'
+  type: string
+  itemId: string
+  answers: string[]
+  attempts: number
+  ms: number
+  outcome: 'first' | 'solved' | 'help'
+  plain?: string
+}
+
+export function logExercise(data: AppData, row: ExerciseLog): void {
+  data.log = [...(data.log || []), row].slice(-3000)
+  save(data)
 }
 
 const KEY = 'eva-english-v1'
@@ -55,6 +74,7 @@ function blank(): AppData {
     lastPracticeDate: null,
     confusions: [],
     showAdvanced: false,
+    log: [],
   }
 }
 
@@ -66,7 +86,7 @@ export function load(): AppData {
     if (!raw) return blank()
     const data = JSON.parse(raw) as AppData
     if (!data.version) return blank()
-    return { ...blank(), ...data, version: 1, showAdvanced: !!data.showAdvanced }
+    return { ...blank(), ...data, version: 1, showAdvanced: !!data.showAdvanced, log: Array.isArray(data.log) ? data.log : [] }
   } catch {
     return mem || (mem = blank())
   }

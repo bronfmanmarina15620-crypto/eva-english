@@ -628,25 +628,3 @@ function renderArrange(q: Question, body: HTMLElement, host: Host) {
   })
   body.appendChild(clear)
 }
-
-export function revealCorrect(q: Question): string {
-  if (q.type === 'next-letter') return (q.correct || '').toUpperCase()
-  if (q.type === 'build-cvc' || q.type === 'arrange-ltr' || q.type === 'direction') return q.correct || ''
-  if (q.letter) return `${q.letter.upper}/${q.letter.lower}`
-  if (q.word) return q.word.word
-  if (q.heart) return q.heart.word
-  return q.correct || ''
-}
-
-export function speakCorrect(q: Question): void {
-  unlock()
-  if (q.nameMode) {
-    const id = q.type === 'next-letter' ? q.correct : q.letter?.name || q.correct
-    if (id) speakLetterName(id)
-    return
-  }
-  if (q.letter) speakLetterSound(q.letter.sound, q.letter.keyword)
-  else if (q.word) speak(q.word.word, { rate: 0.85 })
-  else if (q.heart) speak(q.heart.word, { rate: 0.9 })
-  else if (q.correct) speak(q.correct, { rate: 0.85 })
-}

@@ -12,6 +12,8 @@ import {
   todayKey,
   getShowAdvanced,
   setShowAdvanced,
+  logExercise,
+  type ExerciseLog,
 } from './storage'
 import {
   generateSession,
@@ -22,7 +24,8 @@ import {
   type Question,
   type ModuleOpts,
 } from './session'
-import { renderQuestion, revealCorrect, speakCorrect, type AnswerResult } from './questions'
+import { renderQuestion, type AnswerResult } from './questions'
+import { GTYPE_META, GTYPES, GIFTED_TIPS, pickGiftedItems, type GType, type GItem, type GStats } from './gifted'
 import { CVC_WORDS, HEART_WORDS, PARENT_TIPS, PHONICS_TIPS, lettersAZ, shuffle } from './content'
 
 warmVoices()
@@ -38,20 +41,63 @@ document.addEventListener(
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
-type Screen = 'home' | 'practice' | 'end' | 'pin' | 'parent' | 'cvc-pick'
+type Screen = 'gate' | 'home' | 'gifted-home' | 'practice' | 'end' | 'pin' | 'parent' | 'cvc-pick'
 
 let data = load()
-let screen: Screen = 'home'
+let screen: Screen = 'gate'
 let questions: Question[] = []
 let qi = 0
 let correctCount = 0
 let firstTryCount = 0
 let streak = 0
-let triedOnce = false
 let currentModule: ModuleId = 'm1'
 let currentLabel = ''
 let moduleOpts: ModuleOpts = {}
 let songPlaying = false
+// shared attempt state (standing rules: up to 3 attempts, never reveal)
+let area: 'english' | 'gifted' = 'english'
+let attempts = 0
+let answersGiven: string[] = []
+let itemStart = 0
+let helpList: string[] = []
+let gItems: GItem[] = []
+let gType: GType | 'mixed' = 'mixed'
+let sessionStart = 0
+let timerId: number | undefined
+const GIFTED_MS = 20 * 60 * 1000
+const CODING_URL = 'https://bronfmanmarina15620-crypto.github.io/evelyn-code/'
+const HELP_MSG = 'כדאי לבקש מאמא, מאבא או מהמורה להסביר את התרגיל הזה'
+
+const EN_TYPE_HE: Record<string, string> = {
+  'hear-letter': 'אנגלית · שמיעת צליל ובחירת אות',
+  'hear-name': 'אנגלית · שמיעת שם אות ובחירה',
+  'see-name': 'אנגלית · זיהוי שם אות',
+  'next-letter': 'אנגלית · האות הבאה ב־ABC',
+  'match-case': 'אנגלית · אות גדולה↔קטנה',
+  trace: 'אנגלית · כתיבת אות',
+  'starts-with': 'אנגלית · במה המילה מתחילה',
+  'name-vs-sound': 'אנגלית · שם מול צליל',
+  'oral-blend': 'אנגלית · חיבור צלילים',
+  'build-cvc': 'אנגלית · בניית מילה',
+  'read-cvc': 'אנגלית · קריאת מילה',
+  segment: 'אנגלית · פירוק מילה',
+  heart: 'אנגלית · מילות לב',
+  'odd-one-out': 'אנגלית · יוצא דופן',
+  'arrange-ltr': 'אנגלית · סידור אותיות',
+  direction: 'אנגלית · כיוון כתיבה',
+}
+function typeLabel(t: string): string {
+  if (t.startsWith('g:')) return 'מחוננים · ' + GTYPE_META[t.slice(2) as GType].title
+  return EN_TYPE_HE[t] || t
+}
+
+function englishPlain(q: Question): string {
+  const visual = ['see-name', 'next-letter', 'match-case', 'name-vs-sound'].includes(q.type)
+  const shown = q.type === 'match-case' ? (q.askSound ? q.letter?.upper : q.letter?.lower) : q.letter?.upper
+  if (visual && shown) return `${q.promptHe} (האות שהוצגה: ${shown})`
+  if ((q.type === 'read-cvc' || q.type === 'segment') && q.word) return `${q.promptHe} (המילה: ${q.word.word})`
+  return `${q.promptHe} (תרגיל שמיעה)`
+}
 
 function pct(a: number, b: number): string {
   if (!b) return '—'
@@ -60,7 +106,9 @@ function pct(a: number, b: number): string {
 
 function render(): void {
   data = load()
-  if (screen === 'home') renderHome()
+  if (screen === 'gate') renderGate()
+  else if (screen === 'gifted-home') renderGiftedHome()
+  else if (screen === 'home') renderHome()
   else if (screen === 'practice') renderPractice()
   else if (screen === 'end') renderEnd()
   else if (screen === 'pin') renderPin()
@@ -111,7 +159,7 @@ function renderHome(): void {
         ? `<h3 class="adv-heading">עוד נושאים</h3><div class="mod-grid" id="advMods"></div>`
         : ''
     }
-    <button class="ghost parent-btn" id="btnParent">הורים / התקדמות</button>
+    <button class="ghost" id="btnGate">→ חזרה לעולם של אווה</button>
     <p class="note">כל תרגול = 15 שאלות · שם האות בלבד (לא הצליל)</p>
     `,
     '',
@@ -166,10 +214,113 @@ function renderHome(): void {
     })
   })
 
-  app.querySelector('#btnParent')!.addEventListener('click', () => {
-    screen = 'pin'
+  app.querySelector('#btnGate')!.addEventListener('click', () => {
+    stopAudio()
+    songPlaying = false
+    screen = 'gate'
     render()
   })
+}
+
+function renderGate(): void {
+  shell(`
+    <h2 class="gate-title">העולם של אווה 🌍</h2>
+    <p class="lead">מה מתרגלים היום?</p>
+    <div class="gate-grid">
+      <button class="gate-tile en" id="tEn" type="button"><span class="gate-emoji">🔤</span><b>אנגלית</b><small>ABC ושמות האותיות</small></button>
+      <button class="gate-tile gf" id="tGf" type="button"><span class="gate-emoji">🧠</span><b>הכנה למבחן המחוננים</b><small>חשיבה, מילים, מספרים וצורות</small></button>
+      <a class="gate-tile cd" href="${CODING_URL}" target="_blank" rel="noopener"><span class="gate-emoji">🧩</span><b>תכנות</b><small>נפתח באפליקציה נפרדת</small></a>
+    </div>
+    <button class="ghost parent-btn" id="btnParent">הורים / התקדמות</button>
+  `)
+  app.querySelector('#tEn')!.addEventListener('click', () => { screen = 'home'; render() })
+  app.querySelector('#tGf')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
+  app.querySelector('#btnParent')!.addEventListener('click', () => { screen = 'pin'; render() })
+}
+
+function giftedStats(): { stats: GStats; typeErr: Record<string, number> } {
+  const stats: GStats = {}
+  const agg: Record<string, { n: number; bad: number }> = {}
+  for (const r of data.log || []) {
+    if (r.area !== 'gifted') continue
+    const s = (stats[r.itemId] ||= { tries: 0, fails: 0, firstOk: 0, last: 0, lastFail: 0 })
+    s.tries++
+    s.last = Math.max(s.last, r.at)
+    if (r.outcome === 'first') s.firstOk++
+    else { s.fails++; s.lastFail = Math.max(s.lastFail, r.at) }
+    const t = r.type.slice(2)
+    const a = (agg[t] ||= { n: 0, bad: 0 })
+    a.n++
+    if (r.outcome !== 'first') a.bad++
+  }
+  const typeErr: Record<string, number> = {}
+  for (const t of GTYPES) typeErr[t] = agg[t] ? agg[t].bad / agg[t].n : 0.5
+  return { stats, typeErr }
+}
+
+function renderGiftedHome(): void {
+  shell(`
+    <h2>הכנה למבחן המחוננים 🧠</h2>
+    <p class="lead">תרגול קצר, עד 20 דקות. לא ממהרים, חושבים ובודקים.</p>
+    <button class="primary" id="gMixed" type="button">🎲 תרגול מעורב</button>
+    <div class="mod-grid" id="gmods"></div>
+    <button class="ghost" id="btnGate">→ חזרה לעולם של אווה</button>
+    <p class="note">עד 3 ניסיונות לכל שאלה. התרגול חוזר יותר על מה שקשה לך.</p>
+  `)
+  const g = app.querySelector('#gmods')!
+  GTYPES.forEach((t) => {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.className = 'mod-card'
+    b.innerHTML = `<div class="mod-emoji">${GTYPE_META[t].emoji}</div><div class="mod-title">${GTYPE_META[t].title}</div>`
+    b.addEventListener('click', () => startGifted(t))
+    g.appendChild(b)
+  })
+  app.querySelector('#gMixed')!.addEventListener('click', () => startGifted('mixed'))
+  app.querySelector('#btnGate')!.addEventListener('click', () => { screen = 'gate'; render() })
+}
+
+function resetSessionState(): void {
+  qi = 0
+  correctCount = 0
+  firstTryCount = 0
+  streak = 0
+  attempts = 0
+  answersGiven = []
+  helpList = []
+  itemStart = Date.now()
+  sessionStart = Date.now()
+}
+
+function startGifted(t: GType | 'mixed'): void {
+  area = 'gifted'
+  gType = t
+  currentModule = ('gifted-' + t) as ModuleId
+  currentLabel = 'מחוננים · ' + (t === 'mixed' ? 'מעורב' : GTYPE_META[t].title)
+  const { stats, typeErr } = giftedStats()
+  gItems = pickGiftedItems(t, stats, typeErr, 40)
+  resetSessionState()
+  screen = 'practice'
+  startTimer()
+  render()
+}
+
+function startTimer(): void {
+  stopTimer()
+  timerId = window.setInterval(() => {
+    const el = document.querySelector<HTMLElement>('#gtimer')
+    if (el) el.textContent = timerText()
+  }, 1000)
+}
+function stopTimer(): void {
+  if (timerId) window.clearInterval(timerId)
+  timerId = undefined
+}
+function timerText(): string {
+  const left = Math.max(0, GIFTED_MS - (Date.now() - sessionStart))
+  const m = Math.floor(left / 60000)
+  const sec = Math.floor((left % 60000) / 1000)
+  return left === 0 ? 'הזמן נגמר – מסיימים את השאלה הזו 🌙' : `⏱ ${m}:${String(sec).padStart(2, '0')}`
 }
 
 function renderCvcPick(): void {
@@ -211,44 +362,54 @@ function renderCvcPick(): void {
 function startModule(id: ModuleId): void {
   stopAudio()
   songPlaying = false
+  area = 'english'
   currentModule = id
   currentLabel = MODULE_META[id].title
   questions = generateSession(id, moduleOpts)
-  qi = 0
-  correctCount = 0
-  firstTryCount = 0
-  streak = 0
-  triedOnce = false
+  resetSessionState()
+  stopTimer()
   screen = 'practice'
   render()
 }
 
+function sessionTotal(): number {
+  return area === 'english' ? questions.length : gItems.length
+}
+
 function renderPractice(): void {
-  const q = questions[qi]
   const acc = pct(correctCount, qi)
+  const top =
+    area === 'english'
+      ? `<div class="chip"><b>${qi + 1}/${questions.length}</b><small>תרגילים</small></div>`
+      : `<div class="chip"><b>${qi + 1}</b><small>שאלה</small></div>`
+  const progress =
+    area === 'english'
+      ? ((qi / questions.length) * 100)
+      : Math.min(100, ((Date.now() - sessionStart) / GIFTED_MS) * 100)
   shell(
     `
+    ${area === 'gifted' ? `<div class="g-timer" id="gtimer">${timerText()}</div>` : ''}
     <div class="stats">
-      <div class="chip"><b>${qi + 1}/15</b><small>תרגילים</small></div>
+      ${top}
       <div class="chip"><b>${streak}</b><small>ברצף</small></div>
       <div class="chip"><b>${acc}</b><small>הצלחה</small></div>
     </div>
-    <div class="progress"><div class="bar" style="width:${((qi) / 15) * 100}%"></div></div>
+    <div class="progress"><div class="bar" style="width:${progress}%"></div></div>
+    ${attempts > 0 ? `<p class="note">ניסיון ${attempts + 1} מתוך 3</p>` : ''}
     <div id="qhost"></div>
     <div class="msg" id="msg"></div>
-    <button class="ghost" id="btnHome">חזרה לתפריט</button>
+    <button class="ghost" id="btnHome">סיום וחזרה</button>
     `,
     `<button class="ghost" id="btnExit">✕</button>`,
   )
   const exit = () => {
-    if (confirm('לצאת מהתרגול? ההתקדמות של השאלות עד כה תישמר חלקית.')) {
-      // save partial as session if at least 3 answered
-      if (qi >= 3) {
-        finishSession(data, currentModule, currentLabel + ' (חלקי)', qi, correctCount, firstTryCount)
-        data = load()
+    if (confirm('לסיים את התרגול עכשיו?')) {
+      if (qi >= 1) finishCurrent(true)
+      else {
+        stopTimer()
+        screen = area === 'english' ? 'home' : 'gifted-home'
+        render()
       }
-      screen = 'home'
-      render()
     }
   }
   app.querySelector('#btnExit')!.addEventListener('click', exit)
@@ -256,91 +417,140 @@ function renderPractice(): void {
 
   const host = app.querySelector<HTMLElement>('#qhost')!
   const msg = app.querySelector<HTMLElement>('#msg')!
+  const onAnswer = (r: AnswerResult) => handleAnswer(r, msg, host)
+  if (area === 'english') renderQuestion(questions[qi], { root: host, onAnswer })
+  else renderGiftedItem(gItems[qi], host, onAnswer)
+}
 
-  renderQuestion(q, {
-    root: host,
-    onAnswer: (r) => handleAnswer(r, msg, host),
+function renderGiftedItem(it: GItem, host: HTMLElement, onAnswer: (r: AnswerResult) => void): void {
+  host.innerHTML = ''
+  const card = document.createElement('div')
+  card.className = 'qcard gcard'
+  card.innerHTML = `<div class="name-badge">${GTYPE_META[it.type].title}</div><div class="prompt">${GTYPE_META[it.type].promptHe}</div><div class="g-stem">${it.stem}</div>`
+  const grid = document.createElement('div')
+  grid.className = 'opt-grid g-opts'
+  const letters = ['א', 'ב', 'ג', 'ד']
+  it.options.forEach((o, i) => {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.className = 'opt g-opt'
+    b.innerHTML = `<span class="g-letter">${letters[i]}.</span> <span class="g-optbody">${o}</span>`
+    b.addEventListener('click', () => onAnswer({ ok: i === it.correct, chosen: letters[i] }))
+    grid.appendChild(b)
+  })
+  card.appendChild(grid)
+  host.appendChild(card)
+}
+
+function currentMeta(): { type: string; itemId: string; plain: string } {
+  if (area === 'english') {
+    const q = questions[qi]
+    return { type: q.type, itemId: q.skillId + ':' + q.type, plain: englishPlain(q) }
+  }
+  const it = gItems[qi]
+  return { type: 'g:' + it.type, itemId: it.id, plain: it.plain }
+}
+
+function writeLog(outcome: ExerciseLog['outcome']): void {
+  const m = currentMeta()
+  logExercise(data, {
+    at: Date.now(),
+    date: todayKey(),
+    area,
+    type: m.type,
+    itemId: m.itemId,
+    answers: [...answersGiven],
+    attempts,
+    ms: Date.now() - itemStart,
+    outcome,
+    plain: m.plain,
   })
 }
 
+function skillOf(): { id: string; type: 'letter' | 'cvc' | 'heart' | 'blend' | 'other' } {
+  if (area === 'english') return { id: questions[qi].skillId, type: questions[qi].skillType }
+  return { id: 'gifted:' + gItems[qi].type, type: 'other' }
+}
+
 function handleAnswer(r: AnswerResult, msg: HTMLElement, host: HTMLElement): void {
-  const q = questions[qi]
-  // disable further clicks
   host.querySelectorAll('button').forEach((b) => ((b as HTMLButtonElement).disabled = true))
+  attempts++
+  answersGiven.push(r.chosen ?? '')
+  const sk = skillOf()
 
   if (r.ok) {
     beep('ok')
     msg.className = 'msg ok'
-    msg.textContent = triedOnce ? 'יופי! עכשיו נכון ⭐' : 'כל הכבוד! ⭐'
-    recordAnswer(data, q.skillId, q.skillType, true)
+    msg.textContent = attempts > 1 ? 'יופי! עכשיו נכון ⭐' : 'כל הכבוד! ⭐'
+    recordAnswer(data, sk.id, sk.type, true)
     save(data)
     correctCount++
-    if (!triedOnce) firstTryCount++
+    if (attempts === 1) firstTryCount++
     streak++
-    triedOnce = false
-    setTimeout(() => {
-      qi++
-      if (qi >= questions.length) {
-        finishSession(data, currentModule, currentLabel, 15, correctCount, firstTryCount)
-        data = load()
-        screen = 'end'
-      }
-      render()
-    }, 700)
-  } else {
-    beep('no')
-    if (!triedOnce) {
-      triedOnce = true
-      msg.className = 'msg no'
-      msg.innerHTML = 'כמעט... נסי שוב 💛'
-      recordAnswer(data, q.skillId, q.skillType, false, r.confusionWith)
-      save(data)
-      streak = 0
-      setTimeout(() => {
-        // re-enable / re-render same question
-        render()
-      }, 900)
-    } else {
-      msg.className = 'msg no'
-      const ans = revealCorrect(q)
-      msg.innerHTML = `בואי נזכור: <span dir="ltr">${ans}</span>`
-      speakCorrect(q)
-      recordAnswer(data, q.skillId, q.skillType, false, r.confusionWith)
-      save(data)
-      streak = 0
-      triedOnce = false
-      setTimeout(() => {
-        qi++
-        if (qi >= questions.length) {
-          finishSession(data, currentModule, currentLabel, 15, correctCount, firstTryCount)
-          data = load()
-          screen = 'end'
-        }
-        render()
-      }, 1600)
-    }
+    writeLog(attempts === 1 ? 'first' : 'solved')
+    setTimeout(advance, 700)
+    return
   }
+
+  beep('no')
+  recordAnswer(data, sk.id, sk.type, false, r.confusionWith)
+  save(data)
+  streak = 0
+  msg.className = 'msg no'
+  if (attempts < 3) {
+    msg.textContent = attempts === 1 ? 'כמעט... נסי שוב 💛' : 'עוד ניסיון אחד. חשבי בשקט ובדקי שוב 💛'
+    setTimeout(() => render(), 1000)
+    return
+  }
+  // 3rd miss: never reveal the answer
+  msg.textContent = HELP_MSG + ' 💛'
+  helpList.push(currentMeta().plain)
+  writeLog('help')
+  setTimeout(advance, 2600)
+}
+
+function advance(): void {
+  qi++
+  attempts = 0
+  answersGiven = []
+  itemStart = Date.now()
+  const timeUp = area === 'gifted' && Date.now() - sessionStart >= GIFTED_MS
+  if (qi >= sessionTotal() || timeUp) finishCurrent(false)
+  else render()
+}
+
+function finishCurrent(partial: boolean): void {
+  stopTimer()
+  finishSession(data, currentModule, currentLabel + (partial ? ' (חלקי)' : ''), qi, correctCount, firstTryCount)
+  data = load()
+  screen = 'end'
+  render()
 }
 
 function renderEnd(): void {
   const tipPool = getShowAdvanced(data) ? [...PARENT_TIPS, ...PHONICS_TIPS] : PARENT_TIPS
-  const tip = shuffle(tipPool)[0]
-  const stars = Math.max(1, Math.round((correctCount / 15) * 5))
+  const tip = area === 'english' ? shuffle(tipPool)[0] : 'לשבת יחד על שאלה אחת מהרשימה, ולבקש מאווה להסביר בקול איך חשבה. לא לתת את התשובה.'
+  const total = Math.max(1, qi)
+  const stars = Math.max(1, Math.round((correctCount / total) * 5))
+  const help = helpList.length
+    ? `<div class="panel help-list"><strong>${HELP_MSG}:</strong><ol>${helpList.map((h) => `<li>${h}</li>`).join('')}</ol></div>`
+    : ''
   shell(
     `
     <div class="celebrate">
       <div class="stars">${'⭐'.repeat(stars)}</div>
       <h2>סיימת תרגול!</h2>
-      <p class="lead">${correctCount} מתוך 15 נכון · ${firstTryCount} בניסיון ראשון</p>
+      <p class="lead">${correctCount} מתוך ${qi} נכון · ${firstTryCount} בניסיון ראשון</p>
+      ${help}
       <div class="panel tip"><strong>טיפ להורים:</strong><br>${tip}</div>
       <button class="primary" id="again">עוד סבב באותו נושא</button>
       <button class="ghost" id="home">חזרה לתפריט</button>
     </div>
     `,
   )
-  app.querySelector('#again')!.addEventListener('click', () => startModule(currentModule))
+  app.querySelector('#again')!.addEventListener('click', () => (area === 'english' ? startModule(currentModule) : startGifted(gType)))
   app.querySelector('#home')!.addEventListener('click', () => {
-    screen = 'home'
+    screen = area === 'english' ? 'home' : 'gifted-home'
     render()
   })
 }
@@ -371,7 +581,7 @@ function renderPin(): void {
     if (e.key === 'Enter') go()
   })
   app.querySelector('#pinBack')!.addEventListener('click', () => {
-    screen = 'home'
+    screen = 'gate'
     render()
   })
   setTimeout(() => input.focus(), 100)
@@ -443,6 +653,13 @@ function renderParent(): void {
         <div class="chip"><b>${mastered}/26</b><small>שמות חזקים</small></div>
       </div>
     </div>
+
+    <h3>מה הכי קשה לאווה (מהקשה לקל)</h3>
+    <div id="rank"></div>
+
+    <h3>סיכום שבועי (7 ימים)</h3>
+    <div class="panel" id="weekly"></div>
+    <button class="primary" id="copyWeek">העתיקי סיכום שבועי</button>
 
     <h3>14 הימים האחרונים</h3>
     <div class="days" id="days"></div>
@@ -535,8 +752,28 @@ function renderParent(): void {
   })
 
   app.querySelector('#back')!.addEventListener('click', () => {
-    screen = 'home'
+    screen = 'gate'
     render()
+  })
+
+  const rank = rankTypes(data.log || [])
+  app.querySelector('#rank')!.innerHTML = rank.length
+    ? rank
+        .map(
+          (r, i) =>
+            `<div class="panel rank-row"><b>${i + 1}. ${typeLabel(r.type)}</b> · ${r.n} תרגילים · בניסיון ראשון ${r.firstPct}% · נעזרה במבוגר ${r.help} · ממוצע ניסיונות ${r.avgAtt}<br><small>למחר: ${suggestFor(r.type)}</small></div>`,
+        )
+        .join('')
+    : '<p class="note">עדיין אין מספיק נתונים</p>'
+  app.querySelector('#weekly')!.innerHTML = weeklySummary().replace(/\n/g, '<br>')
+  app.querySelector('#copyWeek')!.addEventListener('click', async () => {
+    const t = weeklySummary()
+    try {
+      await navigator.clipboard.writeText(t)
+      alert('הסיכום הועתק')
+    } catch {
+      prompt('העתיקי ידנית:', t)
+    }
   })
 
   app.querySelector('#wa')!.addEventListener('click', async () => {
@@ -567,6 +804,57 @@ function renderParent(): void {
       }
     }
   })
+}
+
+type RankRow = { type: string; n: number; firstPct: number; help: number; avgAtt: string; score: number; okPct: number }
+export function rankTypes(log: ExerciseLog[]): RankRow[] {
+  const by: Record<string, ExerciseLog[]> = {}
+  for (const r of log) (by[r.type] ||= []).push(r)
+  return Object.entries(by)
+    .map(([type, rows]) => {
+      const n = rows.length
+      const first = rows.filter((r) => r.outcome === 'first').length
+      const help = rows.filter((r) => r.outcome === 'help').length
+      const att = rows.reduce((a, r) => a + r.attempts, 0) / n
+      return {
+        type,
+        n,
+        firstPct: Math.round((first / n) * 100),
+        okPct: Math.round(((n - help) / n) * 100),
+        help,
+        avgAtt: att.toFixed(1),
+        score: (help / n) * 2 + (1 - first / n) + (att - 1) / 2,
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+}
+
+function suggestFor(type: string): string {
+  if (type.startsWith('g:')) return GIFTED_TIPS[type.slice(2) as GType]
+  return 'סבב קצר של 15 שאלות באותו נושא. לפני כן לשיר יחד את שיר ה־ABC, ולבקש מאווה לומר בקול את שם האות לפני שהיא בוחרת.'
+}
+
+function weeklySummary(): string {
+  const d = load()
+  const since = Date.now() - 7 * 86400000
+  const rows = (d.log || []).filter((r) => r.at >= since)
+  const days = new Set(rows.map((r) => r.date)).size
+  const minutes = Math.round(rows.reduce((a, r) => a + Math.min(r.ms, 5 * 60000), 0) / 60000)
+  const rank = rankTypes(rows)
+  const lines = [
+    '📅 סיכום שבועי – אווה',
+    `ימי תרגול: ${days} מתוך 7`,
+    `דקות תרגול (בערך): ${minutes}`,
+    `תרגילים: ${rows.length}`,
+    '',
+    'דיוק לפי סוג (נפתר עד 3 ניסיונות / בניסיון ראשון):',
+    ...rank.map((r) => `• ${typeLabel(r.type)}: ${r.okPct}% / ${r.firstPct}% (${r.n})`),
+    '',
+    'שלושת הסוגים הכי קשים:',
+    ...(rank.slice(0, 3).map((r, i) => `${i + 1}. ${typeLabel(r.type)}`)),
+  ]
+  if (!rows.length) lines.push('אין עדיין תרגול השבוע')
+  return lines.join('\n')
 }
 
 function buildWhatsAppReport(): string {
