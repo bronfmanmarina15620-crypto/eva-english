@@ -427,3 +427,34 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .g-node{display:inline-flex;min-width:44px;height:44px;border:2px solid #223;border-radius:50%;align-items:center;justify-content:center;font-weight:700}
 .g-box{display:inline-flex;min-width:44px;height:44px;border:3px solid #223;align-items:center;justify-content:center;font-weight:700}
 .carpet{max-width:100%;height:auto}
+/* math prep */
+.gate-tile.mt{background:linear-gradient(135deg,#ffe0ec,#ffd2a8);width:100%;margin-bottom:14px;padding:26px 14px;border:3px solid #ff8fb0}
+.gate-tile.mt b{font-size:1.5rem}
+.math .mn{font-variant-numeric:tabular-nums;font-weight:700;unicode-bidi:isolate}
+.math .big-btn{display:flex;flex-direction:column;align-items:center;width:100%;margin:10px 0;padding:16px;font-size:1.2rem;border-radius:16px;border:0;background:#ffd2a8;font-family:inherit;cursor:pointer}
+.math .big-btn small{font-size:.85rem;opacity:.75}
+.math .m-sheet{background:#ffe0ec}.math .m-mock{background:#dfe9ff}
+.m-topics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.m-topic{padding:14px 8px;border-radius:14px;border:0;background:#fff3df;font:inherit;font-size:1.05rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
+.m-topic span{font-size:1.6rem}
+.m-q{font-size:1.25rem}
+.mseq,.mcmp{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;font-size:1.5rem;margin:10px 0}
+.mseq .sep{opacity:.6}
+.mblank{min-width:84px;height:48px;font-size:1.4rem;font-weight:700;border:3px dashed #c90;border-radius:10px;background:#fffbe8;font-family:inherit}
+.mblank.on{border-style:solid;border-color:#e3508a;background:#fff}
+.mb-row{display:flex;justify-content:center;align-items:center;gap:8px;margin:8px 0;font-size:1.3rem}
+.cmpbox{display:inline-block;min-width:44px;text-align:center;border:3px dashed #c90;border-radius:10px;padding:2px 6px}
+.cmp-btns{display:flex;justify-content:center;gap:14px;margin:12px 0}
+.cmp-b{width:84px;height:84px;font-size:2.4rem;font-weight:800;border-radius:18px;border:0;background:#dfe9ff;cursor:pointer}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:340px;margin:12px auto}
+.keypad button{height:64px;font-size:1.8rem;font-weight:700;border-radius:14px;border:0;background:#eef2ff;cursor:pointer;touch-action:manipulation}
+.keypad .kdel{background:#ffe5e5}.keypad .kok{background:#c9f2d5}
+.nline{max-width:520px;display:block;margin:6px auto;touch-action:manipulation}
+#tapHost .nline{cursor:pointer}
+.m-hint{background:#fff8d6;font-size:1rem}
+.m-msg{min-height:1.6em;text-align:center;font-size:1.15rem;margin:6px 0}
+.m-msg.ok{color:#17803d}.m-msg.no{color:#b35a00}.m-msg.help{color:#7a3db8}
+.clues{text-align:right;line-height:1.8}
+.m-prog{text-align:center;margin:6px 0 10px;font-size:1rem}
+.mseq{font-size:1.2rem;gap:4px}
+.mseq .mblank{min-width:66px;font-size:1.2rem;height:44px}

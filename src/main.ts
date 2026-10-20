@@ -25,6 +25,7 @@ import {
   type ModuleOpts,
 } from './session'
 import { renderQuestion, type AnswerResult } from './questions'
+import { openMath, MTOPIC_META, MATH_TIPS, type MTopic } from './math'
 import { GTYPE_META, GTYPES, GIFTED_TIPS, pickGiftedItems, pickExamChapter, type GType, type GItem, type GStats } from './gifted'
 import { CVC_WORDS, HEART_WORDS, PARENT_TIPS, PHONICS_TIPS, lettersAZ, shuffle } from './content'
 
@@ -87,6 +88,7 @@ const EN_TYPE_HE: Record<string, string> = {
   direction: 'אנגלית · כיוון כתיבה',
 }
 function typeLabel(t: string): string {
+  if (t.startsWith('m:')) return 'חשבון · ' + MTOPIC_META[t.slice(2) as MTopic].title
   if (t.startsWith('g:')) return 'מחוננים · ' + GTYPE_META[t.slice(2) as GType].title
   return EN_TYPE_HE[t] || t
 }
@@ -227,6 +229,7 @@ function renderGate(): void {
   shell(`
     <h2 class="gate-title">העולם של אווה 🌍</h2>
     <p class="lead">מה מתרגלים היום?</p>
+    <button class="gate-tile mt" id="tMt" type="button"><span class="gate-emoji">🧮</span><b>חשבון – הכנה למבדק</b><small>מספרים עד 10,000 · דף החזרה של המורה</small></button>
     <div class="gate-grid">
       <button class="gate-tile en" id="tEn" type="button"><span class="gate-emoji">🔤</span><b>אנגלית</b><small>ABC ושמות האותיות</small></button>
       <button class="gate-tile gf" id="tGf" type="button"><span class="gate-emoji">🧠</span><b>הכנה למבחן המחוננים</b><small>חשיבה, מילים, מספרים וצורות</small></button>
@@ -234,6 +237,7 @@ function renderGate(): void {
     </div>
     <button class="ghost parent-btn" id="btnParent">הורים / התקדמות</button>
   `)
+  app.querySelector('#tMt')!.addEventListener('click', () => openMath(app, () => { screen = 'gate'; render() }))
   app.querySelector('#tEn')!.addEventListener('click', () => { screen = 'home'; render() })
   app.querySelector('#tGf')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
   app.querySelector('#btnParent')!.addEventListener('click', () => { screen = 'pin'; render() })
@@ -1017,6 +1021,7 @@ export function rankTypes(log: ExerciseLog[]): RankRow[] {
 }
 
 function suggestFor(type: string): string {
+  if (type.startsWith('m:')) return MATH_TIPS[type.slice(2) as MTopic]
   if (type.startsWith('g:')) return GIFTED_TIPS[type.slice(2) as GType]
   return 'סבב קצר של 15 שאלות באותו נושא. לפני כן לשיר יחד את שיר ה־ABC, ולבקש מאווה לומר בקול את שם האות לפני שהיא בוחרת.'
 }

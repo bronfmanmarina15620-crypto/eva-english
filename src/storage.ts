@@ -44,7 +44,7 @@ export type AppData = {
 export type ExerciseLog = {
   at: number
   date: string
-  area: 'english' | 'gifted'
+  area: 'english' | 'gifted' | 'math'
   type: string
   itemId: string
   answers: string[]
