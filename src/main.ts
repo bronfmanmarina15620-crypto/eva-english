@@ -1112,7 +1112,7 @@ function renderPlan(): void {
     const dn = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'][d.getDay()]
     return `<div class="pl-day ${t.kind}"><b>יום ${dn}</b> <span>${t.kind === 'rest' ? 'מנוחה' : t.kind === 'mock' ? '📝 מבחן דמה' : t.kind === 'done' ? '—' : t.text}</span></div>`
   }).join('')
-  const phases = PHASES.map((p) => `<div class="pl-ph ${p === ph ? 'on' : week > p.to ? 'past' : ''}"><b>${p.name}</b><small>${p.to > p.from ? `שבועות ${p.from}–${p.to}` : `שבוע ${p.from}`}</small></div>`).join('')
+  const phases = PHASES.map((p) => `<div class="pl-ph ${p === ph ? 'on' : week > p.to ? 'past' : ''}"><b>${p.name}</b><small>${p.to > p.from ? `שבועות <bdi dir="ltr">${p.from}–${p.to}</bdi>` : `שבוע ${p.from}`}</small></div>`).join('')
   shell(`
     <h2>🗓️ התוכנית שלי</h2>
     <p class="lead">שבוע ${week} מתוך ${PLAN_WEEKS} · שלב: <b>${ph.name}</b></p>
