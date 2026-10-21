@@ -42,15 +42,17 @@ export function weakTypes(log: ExerciseLog[], now: number): GType[] {
 function sessionIndex(start: Date, d: Date): number {
   let n = 0
   for (let x = startOfDay(start); x < startOfDay(d); x = new Date(x.getFullYear(), x.getMonth(), x.getDate() + 1)) {
-    const ph = phaseOf(weekOf(start, x))
-    if (ph && ph.days.includes(x.getDay())) n++
+    if (isPracticeDay(start, x)) n++
   }
   return n
 }
 
 export function isPracticeDay(start: Date, d: Date): boolean {
   const ph = phaseOf(weekOf(start, d))
-  return !!ph && ph.days.includes(d.getDay())
+  if (!ph) return false
+  // the first day of the plan is always a practice day, so she can start right away
+  if (startOfDay(d).getTime() === startOfDay(start).getTime()) return true
+  return ph.days.includes(d.getDay())
 }
 
 export function taskFor(start: Date, d: Date, log: ExerciseLog[]): Task {
@@ -58,7 +60,7 @@ export function taskFor(start: Date, d: Date, log: ExerciseLog[]): Task {
   const ph = phaseOf(week)
   if (week > PLAN_WEEKS) return { kind: 'done', text: 'התוכנית הסתיימה. בהצלחה במבחן! 🌟' }
   if (!ph || week < 1) return { kind: 'rest', text: 'התוכנית עוד לא התחילה.' }
-  if (!ph.days.includes(d.getDay())) return { kind: 'rest', text: 'היום יום מנוחה 😊 משחקים, קוראים ספר, הולכים לישון בזמן.' }
+  if (!isPracticeDay(start, d)) return { kind: 'rest', text: 'היום יום מנוחה 😊 משחקים, קוראים ספר, הולכים לישון בזמן.' }
   const idx = sessionIndex(start, d)
   const weak = weakTypes(log, d.getTime())
   const rot = GTYPES[idx % GTYPES.length]

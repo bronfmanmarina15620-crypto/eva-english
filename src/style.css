@@ -477,3 +477,5 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .pl-today{border:3px solid #7b4fd6}
 .pl-bar{height:14px;background:#eee;border-radius:8px;overflow:hidden;margin:6px 0}.pl-bar i{display:block;height:100%;background:#22a06b}
 .pl-day{display:flex;gap:10px;padding:6px 8px;border-bottom:1px dashed #eee;text-align:right}.pl-day.rest span{opacity:.6}.pl-day.mock{background:#fff3df}
+.pl-phases{gap:3px}.pl-ph{min-width:0;padding:6px 2px;line-height:1.25}.pl-ph b{font-size:.78rem}.pl-ph small{font-size:.7rem;white-space:nowrap}
+.pl-day b{white-space:nowrap;flex:none;min-width:48px}.pl-day span{flex:1;min-width:0}

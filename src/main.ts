@@ -1110,9 +1110,9 @@ function renderPlan(): void {
     const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i + 1)
     const t = taskFor(start, d, log)
     const dn = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'][d.getDay()]
-    return `<div class="pl-day ${t.kind}"><b>יום ${dn}</b> <span>${t.kind === 'rest' ? 'מנוחה' : t.kind === 'mock' ? '📝 מבחן דמה' : t.kind === 'done' ? '—' : t.text}</span></div>`
+    return `<div class="pl-day ${t.kind}"><b>יום&nbsp;${dn}</b><span>${t.kind === 'rest' ? 'מנוחה' : t.kind === 'mock' ? '📝 מבחן דמה' : t.kind === 'done' ? '—' : t.text}</span></div>`
   }).join('')
-  const phases = PHASES.map((p) => `<div class="pl-ph ${p === ph ? 'on' : week > p.to ? 'past' : ''}"><b>${p.name}</b><small>${p.to > p.from ? `שבועות <bdi dir="ltr">${p.from}–${p.to}</bdi>` : `שבוע ${p.from}`}</small></div>`).join('')
+  const phases = PHASES.map((p) => `<div class="pl-ph ${p === ph ? 'on' : week > p.to ? 'past' : ''}"><b>${p.name}</b><small>${p.to > p.from ? 'שבועות' : 'שבוע'}</small><small class="pl-wk" dir="ltr">${p.to > p.from ? `${p.from}–${p.to}` : p.from}</small></div>`).join('')
   shell(`
     <h2>🗓️ התוכנית שלי</h2>
     <p class="lead">שבוע ${week} מתוך ${PLAN_WEEKS} · שלב: <b>${ph.name}</b></p>
@@ -1122,7 +1122,7 @@ function renderPlan(): void {
       <div class="pl-bar"><i style="width:${pr.planned ? Math.round((pr.done / pr.planned) * 100) : 0}%"></i></div>
       <small class="note">יום נחשב בוצע אחרי 10 תרגילים או יותר.</small></div>
     <p class="note">${ph.goal}</p>
-    <h3>השבוע הקרוב</h3><div class="pl-next">${next}</div>
+    <h3>7 הימים הבאים</h3><div class="pl-next">${next}</div>
     <button class="ghost" id="back">→ חזרה</button>`)
   app.querySelector('#back')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
   app.querySelector('#doTask')?.addEventListener('click', () => (task.kind === 'mock' ? startExam() : task.kind === 'practice' && startGifted(task.type)))
