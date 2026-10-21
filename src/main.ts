@@ -25,6 +25,8 @@ import {
   type ModuleOpts,
 } from './session'
 import { renderQuestion, type AnswerResult } from './questions'
+import { conclusions, renderLogPanel, areaSummaryLines } from './insights'
+import { taskFor, progress, weekOf, phaseOf, PHASES, PLAN_WEEKS, isPracticeDay } from './plan'
 import { openMath, MTOPIC_META, MATH_TIPS, type MTopic } from './math'
 import { GTYPE_META, GTYPES, GIFTED_TIPS, pickGiftedItems, pickExamChapter, type GType, type GItem, type GStats } from './gifted'
 import { CVC_WORDS, HEART_WORDS, PARENT_TIPS, PHONICS_TIPS, lettersAZ, shuffle } from './content'
@@ -42,7 +44,7 @@ document.addEventListener(
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
-type Screen = 'gate' | 'home' | 'gifted-home' | 'exam' | 'practice' | 'end' | 'pin' | 'parent' | 'cvc-pick'
+type Screen = 'gate' | 'home' | 'gifted-home' | 'exam' | 'practice' | 'end' | 'pin' | 'parent' | 'cvc-pick' | 'plan'
 
 let data = load()
 let screen: Screen = 'gate'
@@ -117,6 +119,7 @@ function render(): void {
   else if (screen === 'pin') renderPin()
   else if (screen === 'parent') renderParent()
   else if (screen === 'cvc-pick') renderCvcPick()
+  else if (screen === 'plan') renderPlan()
 }
 
 function shell(inner: string, topRight?: string): void {
@@ -267,6 +270,7 @@ function renderGiftedHome(): void {
   shell(`
     <h2>הכנה למבחן המחוננים 🧠</h2>
     <p class="lead">תרגול קצר, עד 20 דקות. לא ממהרים, חושבים ובודקים.</p>
+    <button class="primary plan-btn" id="gPlan" type="button">🗓️ התוכנית שלי – המשימה של היום</button>
     <button class="primary exam-btn" id="gExam" type="button">📝 מבחן דמה כמו במבחן האמיתי</button>
     <p class="note">5 פרקים לפי הסדר של מבחן ההדגמה הרשמי, 10 שאלות בכל פרק, שעון לכל פרק. תשובה אחת לכל שאלה.</p>
     <a class="ghost pdf-link" href="${OFFICIAL_PDF}" target="_blank" rel="noopener">📄 מבחן ההדגמה הרשמי של משרד החינוך (PDF)</a>
@@ -287,6 +291,7 @@ function renderGiftedHome(): void {
   })
   app.querySelector('#gMixed')!.addEventListener('click', () => startGifted('mixed'))
   app.querySelector('#gExam')!.addEventListener('click', startExam)
+  app.querySelector('#gPlan')!.addEventListener('click', () => { screen = 'plan'; render() })
   app.querySelector('#btnGate')!.addEventListener('click', () => { screen = 'gate'; render() })
 }
 
@@ -310,7 +315,7 @@ const EXAM_INSTR: Record<GType, string> = {
   figural: 'בחלק זה שאלות משלושה סוגים: צורות בשורה, צורות בשלוש שורות, והחתיכה החסרה בשטיח. בכל שאלה גלו את הכלל ובחרו את הצורה החסרה מבין 4 האפשרויות.',
 }
 const EXAM_GENERAL = 'במבחן חמישה חלקים. בכל השאלות עליכם לבחור את התשובה הנכונה מבין 4 אפשרויות. כדאי לענות על כל השאלות, ואם לא יודעים – לנחש. לכל חלק יש זמן משלו.'
-type ExamCh = { type: GType; items: GItem[]; answers: (number | null)[]; start: number }
+type ExamCh = { type: GType; items: GItem[]; answers: (number | null)[]; start: number; ms: number[] }
 let exam: ExamCh[] = []
 let examCh = 0
 let examQ = 0
@@ -319,7 +324,7 @@ let examPhase: 'intro' | 'chapter-intro' | 'q' | 'results' = 'intro'
 function startExam(): void {
   exam = EXAM_ORDER.map((t) => {
     const items = pickExamChapter(t, EXAM_PER_CHAPTER)
-    return { type: t, items, answers: items.map(() => null), start: 0 }
+    return { type: t, items, answers: items.map(() => null), start: 0, ms: items.map(() => 0) }
   })
   examCh = 0
   examQ = 0
@@ -373,7 +378,7 @@ function finishExam(): void {
       else helpList.push(it.plain)
       logExercise(data, {
         at: Date.now(), date: todayKey(), area: 'gifted', type: 'g:' + it.type, itemId: it.id,
-        answers: a == null ? [] : ['אבגד'[a]], attempts: a == null ? 0 : 1, ms: 0,
+        answers: a == null ? [] : ['אבגד'[a]], attempts: a == null ? 0 : 1, ms: ch.ms[i],
         outcome: good ? 'first' : 'help', plain: it.plain,
       })
     }),
@@ -419,14 +424,17 @@ function renderExam(): void {
       `<button class="ghost" id="btnExit">✕</button>`)
     const host = app.querySelector<HTMLElement>('#qhost')!
     renderGiftedItem(ch.items[examQ], host, () => {})
+    const qStart = Date.now()
+    const qi0 = examQ
     host.querySelectorAll<HTMLButtonElement>('.g-opt').forEach((b, i) => {
       if (ch.answers[examQ] === i) b.classList.add('chosen')
       b.addEventListener('click', () => {
         ch.answers[examQ] = i
+        ch.ms[qi0] += Date.now() - qStart
         advanceExam()
       })
     })
-    app.querySelector('#skip')!.addEventListener('click', advanceExam)
+    app.querySelector('#skip')!.addEventListener('click', () => { ch.ms[qi0] += Date.now() - qStart; advanceExam() })
     app.querySelector('#btnExit')!.addEventListener('click', () => {
       if (confirm('לסיים את מבחן הדמה עכשיו? שאלות שלא נענו ייחשבו כטעות.')) finishExam()
     })
@@ -833,6 +841,11 @@ function renderParent(): void {
       <h2>ההתקדמות של אווה</h2>
       <button class="ghost" id="back">חזרה</button>
     </div>
+    <div class="bottom-line" id="bline"></div>
+    <h3>מה רואים מהתרגול (14 ימים)</h3>
+    <div class="panel concl" id="concl"></div>
+    <h3>כל התרגילים, מהחדש לישן</h3>
+    <div class="panel" id="xlog"></div>
     <div class="panel">
       <div class="stats">
         <div class="chip"><b>${data.streakDays || 0}</b><small>רצף ימים</small></div>
@@ -947,6 +960,10 @@ function renderParent(): void {
     render()
   })
 
+  const cc = conclusions(data.log || [], typeLabel)
+  app.querySelector('#bline')!.innerHTML = `<div class="bl-title">שורה תחתונה</div><p>${cc.bottom}</p>`
+  app.querySelector('#concl')!.innerHTML = cc.points.length ? `<ul>${cc.points.map((p) => `<li>${p}</li>`).join('')}</ul>` : '<p class="note">צריך עוד קצת תרגול כדי לראות מגמות.</p>'
+  renderLogPanel(app.querySelector('#xlog')!, data.log || [], typeLabel)
   const rank = rankTypes(data.log || [])
   app.querySelector('#rank')!.innerHTML = rank.length
     ? rank
@@ -1052,7 +1069,7 @@ function weeklySummary(): string {
 function buildWhatsAppReport(): string {
   const d = load()
   const lines = [
-    '📊 דוח אווה אנגלית',
+    '📊 דוח אווה',
     `רצף ימים: ${d.streakDays || 0}`,
     `סשנים: ${d.sessions.length}`,
     `שמות אותיות חזקים: ${lettersAZ().filter((l) => letterStrength(l.id) === 'g').map((l) => l.upper).join(' ') || '—'}`,
@@ -1063,9 +1080,53 @@ function buildWhatsAppReport(): string {
       return `• ${dt} — ${s.label}: ${s.correct}/${s.total}`
     }),
     '',
+    '🧠 מחוננים ו־🧮 חשבון (7 ימים):',
+    ...areaSummaryLines(d.log || [], typeLabel),
+    '',
+    'שורה תחתונה: ' + conclusions(d.log || [], typeLabel).bottom.replace(/<[^>]+>/g, ''),
+    '',
     'לינק: https://bronfmanmarina15620-crypto.github.io/eva-english/',
   ]
   return lines.join('\n')
+}
+
+const PLAN_KEY = 'eva-gifted-plan-start'
+function planStart(): Date {
+  let v = localStorage.getItem(PLAN_KEY)
+  if (!v) { v = todayKey(); localStorage.setItem(PLAN_KEY, v) }
+  const [y, m, d] = v.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+function renderPlan(): void {
+  const start = planStart()
+  const today = new Date()
+  const log = data.log || []
+  const week = Math.min(PLAN_WEEKS, Math.max(1, weekOf(start, today)))
+  const ph = phaseOf(week) || PHASES[PHASES.length - 1]
+  const task = taskFor(start, today, log)
+  const pr = progress(start, today, log)
+  const btn = task.kind === 'practice' ? `<button class="primary" id="doTask">${pr.todayDone ? 'עוד סבב (כבר עשית היום! ⭐)' : 'מתחילים'} ▶</button>` : task.kind === 'mock' ? `<button class="primary" id="doTask">למבחן הדמה ▶</button>` : ''
+  const next = [...Array(7)].map((_, i) => {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i + 1)
+    const t = taskFor(start, d, log)
+    const dn = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'][d.getDay()]
+    return `<div class="pl-day ${t.kind}"><b>יום ${dn}</b> <span>${t.kind === 'rest' ? 'מנוחה' : t.kind === 'mock' ? '📝 מבחן דמה' : t.kind === 'done' ? '—' : t.text}</span></div>`
+  }).join('')
+  const phases = PHASES.map((p) => `<div class="pl-ph ${p === ph ? 'on' : week > p.to ? 'past' : ''}"><b>${p.name}</b><small>${p.to > p.from ? `שבועות ${p.from}–${p.to}` : `שבוע ${p.from}`}</small></div>`).join('')
+  shell(`
+    <h2>🗓️ התוכנית שלי</h2>
+    <p class="lead">שבוע ${week} מתוך ${PLAN_WEEKS} · שלב: <b>${ph.name}</b></p>
+    <div class="pl-phases">${phases}</div>
+    <div class="panel pl-today"><h3>המשימה של היום</h3><p>${task.text}</p>${btn}</div>
+    <div class="panel"><b>התקדמות:</b> ${pr.done} מתוך ${pr.planned} ימי תרגול בוצעו
+      <div class="pl-bar"><i style="width:${pr.planned ? Math.round((pr.done / pr.planned) * 100) : 0}%"></i></div>
+      <small class="note">יום נחשב בוצע אחרי 10 תרגילים או יותר.</small></div>
+    <p class="note">${ph.goal}</p>
+    <h3>השבוע הקרוב</h3><div class="pl-next">${next}</div>
+    <button class="ghost" id="back">→ חזרה</button>`)
+  app.querySelector('#back')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
+  app.querySelector('#doTask')?.addEventListener('click', () => (task.kind === 'mock' ? startExam() : task.kind === 'practice' && startGifted(task.type)))
+  void isPracticeDay
 }
 
 render()
