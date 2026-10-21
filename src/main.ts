@@ -90,8 +90,8 @@ const EN_TYPE_HE: Record<string, string> = {
   direction: 'אנגלית · כיוון כתיבה',
 }
 function typeLabel(t: string): string {
-  if (t.startsWith('m:')) return 'חשבון · ' + MTOPIC_META[t.slice(2) as MTopic].title
-  if (t.startsWith('g:')) return 'מחוננים · ' + GTYPE_META[t.slice(2) as GType].title
+  if (t.startsWith('m:')) return 'חשבון · ' + (MTOPIC_META[t.slice(2) as MTopic]?.title || t.slice(2))
+  if (t.startsWith('g:')) return 'מחוננים · ' + (GTYPE_META[t.slice(2) as GType]?.title || t.slice(2))
   return EN_TYPE_HE[t] || t
 }
 
