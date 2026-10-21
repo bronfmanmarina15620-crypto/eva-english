@@ -2,7 +2,7 @@
 import type { ExerciseLog } from './storage'
 
 type Label = (t: string) => string
-const AREA_HE: Record<string, string> = { gifted: 'מחוננים', math: 'חשבון', english: 'אנגלית' }
+const AREA_HE: Record<string, string> = { math: 'חשבון', english: 'אנגלית' }
 const OUT_HE: Record<string, string> = { first: '✅ נכון בניסיון ראשון', solved: '🟡 נכון אחרי כמה ניסיונות', help: '🔴 צריך עזרה של מבוגר' }
 const DAY = 86400000
 
