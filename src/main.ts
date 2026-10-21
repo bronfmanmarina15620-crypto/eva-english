@@ -26,9 +26,8 @@ import {
 } from './session'
 import { renderQuestion, type AnswerResult } from './questions'
 import { conclusions, renderLogPanel, areaSummaryLines } from './insights'
-import { taskFor, progress, weekOf, phaseOf, PHASES, PLAN_WEEKS, isPracticeDay } from './plan'
 import { openMath, MTOPIC_META, MATH_TIPS, type MTopic } from './math'
-import { GTYPE_META, GTYPES, GIFTED_TIPS, pickGiftedItems, pickExamChapter, type GType, type GItem, type GStats } from './gifted'
+import { GTYPE_META, GIFTED_TIPS, type GType, type GItem } from './gifted'
 import { CVC_WORDS, HEART_WORDS, PARENT_TIPS, PHONICS_TIPS, lettersAZ, shuffle } from './content'
 
 warmVoices()
@@ -42,9 +41,10 @@ document.addEventListener(
   { once: true, capture: true },
 )
 
+const noGifted = (l?: ExerciseLog[]) => (l || []).filter((r) => r.area !== 'gifted')
 const app = document.querySelector<HTMLDivElement>('#app')!
 
-type Screen = 'gate' | 'home' | 'gifted-home' | 'exam' | 'practice' | 'end' | 'pin' | 'parent' | 'cvc-pick' | 'plan'
+type Screen = 'gate' | 'home' | 'practice' | 'end' | 'pin' | 'parent' | 'cvc-pick'
 
 let data = load()
 let screen: Screen = 'gate'
@@ -64,10 +64,10 @@ let answersGiven: string[] = []
 let itemStart = 0
 let helpList: string[] = []
 let gItems: GItem[] = []
-let gType: GType | 'mixed' = 'mixed'
 let sessionStart = 0
 let timerId: number | undefined
 const GIFTED_MS = 20 * 60 * 1000
+const GIFTED_URL = 'https://bronfmanmarina15620-crypto.github.io/gifted-prep/'
 const CODING_URL = 'https://bronfmanmarina15620-crypto.github.io/evelyn-code/'
 const HELP_MSG = 'כדאי לבקש מאמא, מאבא או מהמורה להסביר את התרגיל הזה'
 
@@ -111,15 +111,12 @@ function pct(a: number, b: number): string {
 function render(): void {
   data = load()
   if (screen === 'gate') renderGate()
-  else if (screen === 'gifted-home') renderGiftedHome()
-  else if (screen === 'exam') renderExam()
   else if (screen === 'home') renderHome()
   else if (screen === 'practice') renderPractice()
   else if (screen === 'end') renderEnd()
   else if (screen === 'pin') renderPin()
   else if (screen === 'parent') renderParent()
   else if (screen === 'cvc-pick') renderCvcPick()
-  else if (screen === 'plan') renderPlan()
 }
 
 function shell(inner: string, topRight?: string): void {
@@ -235,244 +232,14 @@ function renderGate(): void {
     <button class="gate-tile mt" id="tMt" type="button"><span class="gate-emoji">🧮</span><b>חשבון – הכנה למבדק</b><small>מספרים עד 10,000 · דף החזרה של המורה</small></button>
     <div class="gate-grid">
       <button class="gate-tile en" id="tEn" type="button"><span class="gate-emoji">🔤</span><b>אנגלית</b><small>ABC ושמות האותיות</small></button>
-      <button class="gate-tile gf" id="tGf" type="button"><span class="gate-emoji">🧠</span><b>הכנה למבחן המחוננים</b><small>חשיבה, מילים, מספרים וצורות</small></button>
+      <a class="gate-tile gf" id="tGf" href="${GIFTED_URL}" target="_blank" rel="noopener"><span class="gate-emoji">🧠</span><b>הכנה למחוננים</b><small>נפתח באתר נפרד</small></a>
       <a class="gate-tile cd" href="${CODING_URL}" target="_blank" rel="noopener"><span class="gate-emoji">🧩</span><b>תכנות</b><small>נפתח באפליקציה נפרדת</small></a>
     </div>
     <button class="ghost parent-btn" id="btnParent">הורים / התקדמות</button>
   `)
   app.querySelector('#tMt')!.addEventListener('click', () => openMath(app, () => { screen = 'gate'; render() }))
   app.querySelector('#tEn')!.addEventListener('click', () => { screen = 'home'; render() })
-  app.querySelector('#tGf')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
   app.querySelector('#btnParent')!.addEventListener('click', () => { screen = 'pin'; render() })
-}
-
-function giftedStats(): { stats: GStats; typeErr: Record<string, number> } {
-  const stats: GStats = {}
-  const agg: Record<string, { n: number; bad: number }> = {}
-  for (const r of data.log || []) {
-    if (r.area !== 'gifted') continue
-    const s = (stats[r.itemId] ||= { tries: 0, fails: 0, firstOk: 0, last: 0, lastFail: 0 })
-    s.tries++
-    s.last = Math.max(s.last, r.at)
-    if (r.outcome === 'first') s.firstOk++
-    else { s.fails++; s.lastFail = Math.max(s.lastFail, r.at) }
-    const t = r.type.slice(2)
-    const a = (agg[t] ||= { n: 0, bad: 0 })
-    a.n++
-    if (r.outcome !== 'first') a.bad++
-  }
-  const typeErr: Record<string, number> = {}
-  for (const t of GTYPES) typeErr[t] = agg[t] ? agg[t].bad / agg[t].n : 0.5
-  return { stats, typeErr }
-}
-
-function renderGiftedHome(): void {
-  shell(`
-    <h2>הכנה למבחן המחוננים 🧠</h2>
-    <p class="lead">תרגול קצר, עד 20 דקות. לא ממהרים, חושבים ובודקים.</p>
-    <button class="primary plan-btn" id="gPlan" type="button">🗓️ התוכנית שלי – המשימה של היום</button>
-    <button class="primary exam-btn" id="gExam" type="button">📝 מבחן דמה כמו במבחן האמיתי</button>
-    <p class="note">5 פרקים לפי הסדר של מבחן ההדגמה הרשמי, 10 שאלות בכל פרק, שעון לכל פרק. תשובה אחת לכל שאלה.</p>
-    <a class="ghost pdf-link" href="${OFFICIAL_PDF}" target="_blank" rel="noopener">📄 מבחן ההדגמה הרשמי של משרד החינוך (PDF)</a>
-    <h3>תרגול</h3>
-    <button class="primary" id="gMixed" type="button">🎲 תרגול מעורב</button>
-    <div class="mod-grid" id="gmods"></div>
-    <button class="ghost" id="btnGate">→ חזרה לעולם של אווה</button>
-    <p class="note">עד 3 ניסיונות לכל שאלה. התרגול חוזר יותר על מה שקשה לך.</p>
-  `)
-  const g = app.querySelector('#gmods')!
-  GTYPES.forEach((t) => {
-    const b = document.createElement('button')
-    b.type = 'button'
-    b.className = 'mod-card'
-    b.innerHTML = `<div class="mod-emoji">${GTYPE_META[t].emoji}</div><div class="mod-title">${GTYPE_META[t].title}</div>`
-    b.addEventListener('click', () => startGifted(t))
-    g.appendChild(b)
-  })
-  app.querySelector('#gMixed')!.addEventListener('click', () => startGifted('mixed'))
-  app.querySelector('#gExam')!.addEventListener('click', startExam)
-  app.querySelector('#gPlan')!.addEventListener('click', () => { screen = 'plan'; render() })
-  app.querySelector('#btnGate')!.addEventListener('click', () => { screen = 'gate'; render() })
-}
-
-// ---------- Exam simulation (official demo structure) ----------
-const OFFICIAL_PDF = 'https://meyda.education.gov.il/files/gifted/test-shlav2-example.pdf'
-const EXAM_ORDER: GType[] = ['analogy', 'sentence', 'word', 'numshape', 'figural']
-const EXAM_PER_CHAPTER = 10
-const EXAM_CHAPTER_MS = 14 * 60 * 1000 // 70 min total (official) / 5 chapters; per-chapter split not published
-const EXAM_TITLES: Record<GType, string> = {
-  analogy: 'חלק 1: מה הקשר בין המילים?',
-  sentence: 'חלק 2: מהן המילים החסרות במשפט?',
-  word: 'חלק 3: מה הפתרון לבעיה?',
-  numshape: 'חלק 4: מה המספר החסר בצורה?',
-  figural: 'חלק 5: מה הצורה הבאה?',
-}
-const EXAM_INSTR: Record<GType, string> = {
-  analogy: 'בכל שאלה בחלק זה מופיע זוג מילים מודגשות. עליכם לגלות מה הקשר בין זוג המילים המודגשות, ואז לבחור מבין האפשרויות את זוג המילים שהקשר ביניהן הוא הדומה ביותר לקשר שגיליתם. חשוב לשים לב גם לסדר בין המילים בכל זוג.',
-  sentence: 'בכל שאלה מופיע משפט שחסרה בו מילה אחת או כמה מילים, ובמקום המילים החסרות מופיעים קווים. מתחת למשפט יש 4 אפשרויות להשלמת החסר במשפט, ועליכם לבחור מביניהן את התשובה המתאימה ביותר.',
-  word: 'בחלק זה שאלות מילוליות. קראו כל שאלה בתשומת לב ובחרו את התשובה הנכונה מבין 4 אפשרויות התשובה.',
-  numshape: 'בשאלות בחלק זה מופיעים מספרים שמסודרים בתוך צורות. בכל צורה המספרים מסודרים לפי כלל מסוים. הכלל מתבסס על פעולות חשבון (חיבור, חיסור, כפל או חילוק, ולפעמים יותר מפעולה אחת) וגם על המקום של המספרים בצורה. גלו את הכלל, ובעזרתו מצאו איזה מספר צריך להופיע במקום סימן השאלה.',
-  figural: 'בחלק זה שאלות משלושה סוגים: צורות בשורה, צורות בשלוש שורות, והחתיכה החסרה בשטיח. בכל שאלה גלו את הכלל ובחרו את הצורה החסרה מבין 4 האפשרויות.',
-}
-const EXAM_GENERAL = 'במבחן חמישה חלקים. בכל השאלות עליכם לבחור את התשובה הנכונה מבין 4 אפשרויות. כדאי לענות על כל השאלות, ואם לא יודעים – לנחש. לכל חלק יש זמן משלו.'
-type ExamCh = { type: GType; items: GItem[]; answers: (number | null)[]; start: number; ms: number[] }
-let exam: ExamCh[] = []
-let examCh = 0
-let examQ = 0
-let examPhase: 'intro' | 'chapter-intro' | 'q' | 'results' = 'intro'
-
-function startExam(): void {
-  exam = EXAM_ORDER.map((t) => {
-    const items = pickExamChapter(t, EXAM_PER_CHAPTER)
-    return { type: t, items, answers: items.map(() => null), start: 0, ms: items.map(() => 0) }
-  })
-  examCh = 0
-  examQ = 0
-  examPhase = 'intro'
-  area = 'gifted'
-  screen = 'exam'
-  render()
-}
-
-function examLeft(): number {
-  return Math.max(0, EXAM_CHAPTER_MS - (Date.now() - exam[examCh].start))
-}
-
-function examTick(): void {
-  stopTimer()
-  timerId = window.setInterval(() => {
-    const el = document.querySelector<HTMLElement>('#gtimer')
-    const left = examLeft()
-    if (el) el.textContent = `⏱ ${Math.floor(left / 60000)}:${String(Math.floor((left % 60000) / 1000)).padStart(2, '0')} לחלק הזה`
-    if (left === 0) {
-      stopTimer()
-      alert('הזמן של החלק הזה נגמר. עוברים לחלק הבא.')
-      nextChapter()
-    }
-  }, 1000)
-}
-
-function nextChapter(): void {
-  stopTimer()
-  examCh++
-  examQ = 0
-  if (examCh >= exam.length) finishExam()
-  else {
-    examPhase = 'chapter-intro'
-    render()
-  }
-}
-
-function finishExam(): void {
-  stopTimer()
-  examCh = exam.length - 1
-  let total = 0
-  let ok = 0
-  helpList = []
-  exam.forEach((ch) =>
-    ch.items.forEach((it, i) => {
-      const a = ch.answers[i]
-      const good = a === it.correct
-      total++
-      if (good) ok++
-      else helpList.push(it.plain)
-      logExercise(data, {
-        at: Date.now(), date: todayKey(), area: 'gifted', type: 'g:' + it.type, itemId: it.id,
-        answers: a == null ? [] : ['אבגד'[a]], attempts: a == null ? 0 : 1, ms: ch.ms[i],
-        outcome: good ? 'first' : 'help', plain: it.plain,
-      })
-    }),
-  )
-  finishSession(data, 'gifted-exam', 'מחוננים · מבחן דמה', total, ok, ok)
-  data = load()
-  examPhase = 'results'
-  render()
-}
-
-function renderExam(): void {
-  if (examPhase === 'intro') {
-    shell(`
-      <h2>מבחן דמה 📝</h2>
-      <div class="panel exam-instr"><p>${EXAM_GENERAL}</p><p class="note">אורך המבחן הרשמי: 70 דקות. בדמה: 14 דקות לכל חלק (חלוקה שלנו – משרד החינוך לא פרסם זמן לכל חלק).</p></div>
-      <button class="primary" id="go">מתחילים</button>
-      <button class="ghost" id="back">חזרה</button>`)
-    app.querySelector('#go')!.addEventListener('click', () => { examPhase = 'chapter-intro'; render() })
-    app.querySelector('#back')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
-    return
-  }
-  if (examPhase === 'chapter-intro') {
-    const t = exam[examCh].type
-    shell(`
-      <h2>${EXAM_TITLES[t]}</h2>
-      <div class="panel exam-instr"><strong>הוראות</strong><p>${EXAM_INSTR[t]}</p><p class="note">${EXAM_PER_CHAPTER} שאלות · ${EXAM_CHAPTER_MS / 60000} דקות</p></div>
-      <button class="primary" id="go">התחילי את החלק</button>`)
-    app.querySelector('#go')!.addEventListener('click', () => {
-      exam[examCh].start = Date.now()
-      examPhase = 'q'
-      examTick()
-      render()
-    })
-    return
-  }
-  if (examPhase === 'q') {
-    const ch = exam[examCh]
-    shell(`
-      <div class="g-timer" id="gtimer">⏱ …</div>
-      <p class="note">${EXAM_TITLES[ch.type]} · שאלה ${examQ + 1} מתוך ${ch.items.length}</p>
-      <div id="qhost"></div>
-      <button class="ghost" id="skip">דלגי (אפשר לחזור בסוף החלק)</button>`,
-      `<button class="ghost" id="btnExit">✕</button>`)
-    const host = app.querySelector<HTMLElement>('#qhost')!
-    renderGiftedItem(ch.items[examQ], host, () => {})
-    const qStart = Date.now()
-    const qi0 = examQ
-    host.querySelectorAll<HTMLButtonElement>('.g-opt').forEach((b, i) => {
-      if (ch.answers[examQ] === i) b.classList.add('chosen')
-      b.addEventListener('click', () => {
-        ch.answers[examQ] = i
-        ch.ms[qi0] += Date.now() - qStart
-        advanceExam()
-      })
-    })
-    app.querySelector('#skip')!.addEventListener('click', () => { ch.ms[qi0] += Date.now() - qStart; advanceExam() })
-    app.querySelector('#btnExit')!.addEventListener('click', () => {
-      if (confirm('לסיים את מבחן הדמה עכשיו? שאלות שלא נענו ייחשבו כטעות.')) finishExam()
-    })
-    return
-  }
-  // results per chapter (no answers revealed)
-  const rows = exam
-    .map((ch) => {
-      const ok = ch.items.filter((it, i) => ch.answers[i] === it.correct).length
-      const skipped = ch.answers.filter((a) => a == null).length
-      return `<div class="kv"><span>${EXAM_TITLES[ch.type]}</span> <b dir="ltr">${ok}/${ch.items.length}</b>${skipped ? ` <small>(${skipped} בלי תשובה)</small>` : ''}</div>`
-    })
-    .join('')
-  const help = helpList.length
-    ? `<div class="panel help-list"><strong>${HELP_MSG}:</strong><ol>${helpList.map((h) => `<li>${h}</li>`).join('')}</ol></div>`
-    : ''
-  shell(`
-    <div class="celebrate">
-      <h2>סיימת את מבחן הדמה! 🌟</h2>
-      <div class="panel">${rows}</div>
-      ${help}
-      <button class="primary" id="home">חזרה</button>
-    </div>`)
-  app.querySelector('#home')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
-}
-
-function advanceExam(): void {
-  const ch = exam[examCh]
-  // move to next unanswered question in this chapter; finish chapter when all answered
-  for (let k = 1; k <= ch.items.length; k++) {
-    const j = (examQ + k) % ch.items.length
-    if (ch.answers[j] == null) {
-      examQ = j
-      render()
-      return
-    }
-  }
-  nextChapter()
 }
 
 function resetSessionState(): void {
@@ -487,26 +254,6 @@ function resetSessionState(): void {
   sessionStart = Date.now()
 }
 
-function startGifted(t: GType | 'mixed'): void {
-  area = 'gifted'
-  gType = t
-  currentModule = ('gifted-' + t) as ModuleId
-  currentLabel = 'מחוננים · ' + (t === 'mixed' ? 'מעורב' : GTYPE_META[t].title)
-  const { stats, typeErr } = giftedStats()
-  gItems = pickGiftedItems(t, stats, typeErr, 40)
-  resetSessionState()
-  screen = 'practice'
-  startTimer()
-  render()
-}
-
-function startTimer(): void {
-  stopTimer()
-  timerId = window.setInterval(() => {
-    const el = document.querySelector<HTMLElement>('#gtimer')
-    if (el) el.textContent = timerText()
-  }, 1000)
-}
 function stopTimer(): void {
   if (timerId) window.clearInterval(timerId)
   timerId = undefined
@@ -602,7 +349,7 @@ function renderPractice(): void {
       if (qi >= 1) finishCurrent(true)
       else {
         stopTimer()
-        screen = area === 'english' ? 'home' : 'gifted-home'
+        screen = 'home'
         render()
       }
     }
@@ -743,9 +490,9 @@ function renderEnd(): void {
     </div>
     `,
   )
-  app.querySelector('#again')!.addEventListener('click', () => (area === 'english' ? startModule(currentModule) : startGifted(gType)))
+  app.querySelector('#again')!.addEventListener('click', () => startModule(currentModule))
   app.querySelector('#home')!.addEventListener('click', () => {
-    screen = area === 'english' ? 'home' : 'gifted-home'
+    screen = 'home'
     render()
   })
 }
@@ -854,9 +601,6 @@ function renderParent(): void {
       </div>
     </div>
 
-    <div class="panel tip"><strong>טיפים למבחן המחוננים (ממנהלת קבוצת ההורים):</strong>
-      <ul><li>לתרגל עם שעון (מבחן הדמה) רק אחרי שאווה מרגישה בטוחה בחומר. קודם תרגול רגיל, בלי לחץ זמן.</li>
-      <li>להסביר לה שבשלב ב׳ אף אחד לא מצפה שתענה נכון על הכול. זה בסדר לטעות ולנחש.</li></ul></div>
 
     <h3>מה הכי קשה לאווה (מהקשה לקל)</h3>
     <div id="rank"></div>
@@ -960,11 +704,11 @@ function renderParent(): void {
     render()
   })
 
-  const cc = conclusions(data.log || [], typeLabel)
+  const cc = conclusions(noGifted(data.log), typeLabel)
   app.querySelector('#bline')!.innerHTML = `<div class="bl-title">שורה תחתונה</div><p>${cc.bottom}</p>`
   app.querySelector('#concl')!.innerHTML = cc.points.length ? `<ul>${cc.points.map((p) => `<li>${p}</li>`).join('')}</ul>` : '<p class="note">צריך עוד קצת תרגול כדי לראות מגמות.</p>'
-  renderLogPanel(app.querySelector('#xlog')!, data.log || [], typeLabel)
-  const rank = rankTypes(data.log || [])
+  renderLogPanel(app.querySelector('#xlog')!, noGifted(data.log), typeLabel)
+  const rank = rankTypes(noGifted(data.log))
   app.querySelector('#rank')!.innerHTML = rank.length
     ? rank
         .map(
@@ -1046,7 +790,7 @@ function suggestFor(type: string): string {
 function weeklySummary(): string {
   const d = load()
   const since = Date.now() - 7 * 86400000
-  const rows = (d.log || []).filter((r) => r.at >= since)
+  const rows = (noGifted(d.log)).filter((r) => r.at >= since)
   const days = new Set(rows.map((r) => r.date)).size
   const minutes = Math.round(rows.reduce((a, r) => a + Math.min(r.ms, 5 * 60000), 0) / 60000)
   const rank = rankTypes(rows)
@@ -1080,53 +824,14 @@ function buildWhatsAppReport(): string {
       return `• ${dt} — ${s.label}: ${s.correct}/${s.total}`
     }),
     '',
-    '🧠 מחוננים ו־🧮 חשבון (7 ימים):',
-    ...areaSummaryLines(d.log || [], typeLabel),
+    '🧮 חשבון (7 ימים):',
+    ...areaSummaryLines(noGifted(d.log), typeLabel),
     '',
-    'שורה תחתונה: ' + conclusions(d.log || [], typeLabel).bottom.replace(/<[^>]+>/g, ''),
+    'שורה תחתונה: ' + conclusions(noGifted(d.log), typeLabel).bottom.replace(/<[^>]+>/g, ''),
     '',
     'לינק: https://bronfmanmarina15620-crypto.github.io/eva-english/',
   ]
   return lines.join('\n')
-}
-
-const PLAN_KEY = 'eva-gifted-plan-start'
-function planStart(): Date {
-  let v = localStorage.getItem(PLAN_KEY)
-  if (!v) { v = todayKey(); localStorage.setItem(PLAN_KEY, v) }
-  const [y, m, d] = v.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-function renderPlan(): void {
-  const start = planStart()
-  const today = new Date()
-  const log = data.log || []
-  const week = Math.min(PLAN_WEEKS, Math.max(1, weekOf(start, today)))
-  const ph = phaseOf(week) || PHASES[PHASES.length - 1]
-  const task = taskFor(start, today, log)
-  const pr = progress(start, today, log)
-  const btn = task.kind === 'practice' ? `<button class="primary" id="doTask">${pr.todayDone ? 'עוד סבב (כבר עשית היום! ⭐)' : 'מתחילים'} ▶</button>` : task.kind === 'mock' ? `<button class="primary" id="doTask">למבחן הדמה ▶</button>` : ''
-  const next = [...Array(7)].map((_, i) => {
-    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i + 1)
-    const t = taskFor(start, d, log)
-    const dn = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'][d.getDay()]
-    return `<div class="pl-day ${t.kind}"><b>יום&nbsp;${dn}</b><span>${t.kind === 'rest' ? 'מנוחה' : t.kind === 'mock' ? '📝 מבחן דמה' : t.kind === 'done' ? '—' : t.text}</span></div>`
-  }).join('')
-  const phases = PHASES.map((p) => `<div class="pl-ph ${p === ph ? 'on' : week > p.to ? 'past' : ''}"><b>${p.name}</b><small>${p.to > p.from ? 'שבועות' : 'שבוע'}</small><small class="pl-wk" dir="ltr">${p.to > p.from ? `${p.from}–${p.to}` : p.from}</small></div>`).join('')
-  shell(`
-    <h2>🗓️ התוכנית שלי</h2>
-    <p class="lead">שבוע ${week} מתוך ${PLAN_WEEKS} · שלב: <b>${ph.name}</b></p>
-    <div class="pl-phases">${phases}</div>
-    <div class="panel pl-today"><h3>המשימה של היום</h3><p>${task.text}</p>${btn}</div>
-    <div class="panel"><b>התקדמות:</b> ${pr.done} מתוך ${pr.planned} ימי תרגול בוצעו
-      <div class="pl-bar"><i style="width:${pr.planned ? Math.round((pr.done / pr.planned) * 100) : 0}%"></i></div>
-      <small class="note">יום נחשב בוצע אחרי 10 תרגילים או יותר.</small></div>
-    <p class="note">${ph.goal}</p>
-    <h3>7 הימים הבאים</h3><div class="pl-next">${next}</div>
-    <button class="ghost" id="back">→ חזרה</button>`)
-  app.querySelector('#back')!.addEventListener('click', () => { screen = 'gifted-home'; render() })
-  app.querySelector('#doTask')?.addEventListener('click', () => (task.kind === 'mock' ? startExam() : task.kind === 'practice' && startGifted(task.type)))
-  void isPracticeDay
 }
 
 render()

@@ -101,7 +101,7 @@ export function renderLogPanel(host: HTMLElement, log: ExerciseLog[], label: Lab
 export function areaSummaryLines(log: ExerciseLog[], label: Label, now = Date.now()): string[] {
   const week = log.filter((r) => r.at >= now - 7 * DAY)
   const out: string[] = []
-  for (const a of ['gifted', 'math'] as const) {
+  for (const a of ['math'] as const) {
     const rs = week.filter((r) => r.area === a)
     if (!rs.length) { out.push(`${AREA_HE[a]}: אין תרגול השבוע`); continue }
     const ts = byType(rs).sort((x, y) => x.firstPct - y.firstPct)
