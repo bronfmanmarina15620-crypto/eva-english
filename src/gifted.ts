@@ -336,7 +336,7 @@ function buildWordProblems(): GItem[] {
   ;[[13, 5, 2], [15, 4, 1], [16, 6, 3], [14, 5, 3], [17, 6, 2], [19, 7, 4]].forEach(([depth, up, down], k) => {
     let h = 0, n = 0
     while (true) { n++; h += up; if (h >= depth) break; h -= down }
-    const q = `סנאי רוצה להגיע לאגוז בראש עמוד שגובהו ${depth} מטרים. בכל דקה הוא מטפס ${up} מטרים, ואז נח ומחליק ${down} מטרים למטה (אם עוד לא הגיע). בסוף הדקה הכמה יגיע לאגוז?`
+    const q = `סנאי רוצה להגיע לאגוז בראש עמוד שגובהו ${depth} מטרים. בכל דקה הוא מטפס ${up} מטרים, ואז נח ומחליק ${down} מטרים למטה (אם עוד לא הגיע). בסוף איזו דקה הוא יגיע לאגוז?`
     items.push(pack(`wt${k}`, 'word', `<div class="g-sent">${q}</div>`, String(n), nums(n, [Math.ceil(depth / (up - down)), n + 1, Math.ceil(depth / up)]), `בעיית היגיון: ${q}`, r, 3))
   })
   ;[[30, 4, 6], [25, 3, 7], [40, 8, 5], [35, 6, 2]].forEach(([c, a, b], k) => {
