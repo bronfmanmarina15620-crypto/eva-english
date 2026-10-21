@@ -409,6 +409,25 @@ function buildNumShapes(): GItem[] {
     const stem = `<div>${row(c1, c1 * m1, c1 * m2)}${row(c2, '?', c2 * m2)}</div>`
     items.push(pack(`na${i}`, 'numshape', stem, String(ans), nums(ans, [c2 * m2, c2 + m1, ans * 2, ans + c2]), `שרשרת חצים עם מספר חסר (תרגיל ${i + 1})`, r, 3))
   }
+  // number pyramids: each brick = sum of the two bricks below it
+  const pyr = (b: (number | string)[], m: (number | string)[], t: number | string) => {
+    const br = (v: number | string) => `<span class="g-brick${v === '?' ? ' q' : ''}">${v}</span>`
+    return `<div class="g-pyr" dir="ltr"><div>${br(t)}</div><div>${m.map(br).join('')}</div><div>${b.map(br).join('')}</div></div>`
+  }
+  for (let i = 0; i < 12; i++) {
+    const mk = () => { const b = [ri(2, 15), ri(2, 15), ri(2, 15)]; const m = [b[0] + b[1], b[1] + b[2]]; return { b, m, t: m[0] + m[1] } }
+    const ex = mk(), q = mk()
+    let stem: string, ans: number, cands: number[]
+    if (i < 6) {
+      ans = q.t
+      stem = pyr(q.b, q.m, '?'); cands = [q.b[0] + q.b[1] + q.b[2], q.m[0], ans + 10, ans - 1]
+      if (i >= 3) { stem = pyr(q.b, ['?', q.m[1]].map((v, k) => (k === 0 ? '?' : v)), q.t); ans = q.m[0]; cands = [q.t + q.m[1], q.b[0] * q.b[1], ans + 1, q.m[1]] }
+    } else {
+      ans = q.b[0]
+      stem = pyr(['?', q.b[1], q.b[2]], q.m, q.t); cands = [q.m[0] + q.b[1], q.b[1], ans + 2, q.m[0]]
+    }
+    items.push(pack(`np${i}`, 'numshape', `<div class="g-row">${pyr(ex.b, ex.m, ex.t)}<span class="g-gap"></span>${stem}</div>`, String(ans), nums(ans, cands), `פירמידת מספרים (תרגיל ${i + 1})`, r, i < 3 ? 1 : i < 6 ? 2 : 3))
+  }
   return items
 }
 
@@ -598,6 +617,24 @@ function buildFigural(): GItem[] {
     const right = frameBox(frames[2], pos, inner)
     const wrongs = [frameBox(frames[2], pos + 1, inner), frameBox(frames[1], pos, inner), frameBox(frames[2], pos, 1 - inner)]
     items.push(pack(`fy${i}`, 'figural', `<div class="g-matrix" dir="ltr">${grid}</div>`, right, wrongs, `שלוש שורות: מסגרת ומיקום (תרגיל ${i + 1})`, r, 3))
+  }
+  // latin squares: each shape (and colour) once in every row and column
+  for (let i = 0; i < 10; i++) {
+    const sh = shuffleWith([0, 1, 2, 3], r).slice(0, 3)
+    const cl = shuffleWith(COLORS, r).slice(0, 3)
+    const two = i >= 5
+    const cs = ri(1, 2) // colour shift differs from shape shift so pairs don't repeat
+    const cell = (row: number, col: number) => shapeSvg(sh[(row + col) % 3], { fill: two ? cl[(row * cs + col * (3 - cs) + 1) % 3] : cl[0], size: 18 })
+    const qr = ri(1, 2), qc = ri(0, 2)
+    let grid = ''
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) grid += row === qr && col === qc ? Q_BOX : cell(row, col)
+    const rs = (qr + qc) % 3, rc = (qr * cs + qc * (3 - cs) + 1) % 3
+    const right = cell(qr, qc)
+    const f = (k: number, c: number) => shapeSvg(sh[k], { fill: two ? cl[c] : cl[0], size: 18 })
+    const wrongs = two
+      ? [f((rs + 1) % 3, rc), f(rs, (rc + 1) % 3), f((rs + 2) % 3, (rc + 2) % 3)]
+      : [f((rs + 1) % 3, 0), f((rs + 2) % 3, 0), shapeSvg(sh[rs], { fill: cl[1], size: 18 })]
+    items.push(pack(`fl${i}`, 'figural', `<div class="g-matrix" dir="ltr">${grid}</div>`, right, wrongs, `טבלה: כל צורה פעם אחת בכל שורה (תרגיל ${i + 1})`, r, two ? 3 : 2))
   }
   return items
 }
